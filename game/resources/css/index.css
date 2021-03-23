@@ -1,0 +1,60 @@
+html {
+    position: relative;
+    min-height: 100%;
+}
+
+body {
+    margin-bottom: 60px;
+}
+
+.footer {
+    position: absolute;
+    bottom: 0;
+    width: 100%;
+    height: 60px;
+    line-height: 60px;
+}
+
+#game-page {
+    display: none;
+}
+
+#chat-message-box {
+    height: 125px;
+    padding: 5px;
+    overflow-y: scroll;
+}
+
+#game-container-outer {
+    max-width: calc(70vh - 60px);
+    max-height: calc(70vh - 60px);
+}
+
+#content-col {
+    padding-left: 0;
+    padding-right: 0;
+}
+
+#red-outline {
+    background-color: darkred;
+    padding: 2%;
+}
+
+#second-yellow-outline {
+    background-color: #f5cc5b;
+    padding: 1%;
+    height: 100%;
+    display: block;
+}
+
+#maedn {
+    background-color: #f5cc5b;
+    position: absolute;
+    width: 94%;
+    height: 94%;
+    border: 3px solid black;
+}
+
+#container-outer {
+    display: inline;
+}
