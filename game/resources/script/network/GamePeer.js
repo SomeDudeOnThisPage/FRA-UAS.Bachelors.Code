@@ -69,12 +69,7 @@ GamePeer.prototype._createConnection = function(remotePeerId, rtcConfiguration, 
 }
 
 GamePeer.prototype._createSignal = function(type, data, target) {
-  return {
-    type : type,
-    src : this.id,
-    target : target,
-    data : data
-  }
+  return {type : type, src : this.id, target : target, data : data}
 }
 
 GamePeer.prototype.connect = function(remotePeerId) {
@@ -142,6 +137,7 @@ GamePeer.prototype.onsignal = function(e) {
 }
 
 GamePeer.prototype.on = function(e, cb) {
+  console.log(e);
   this.callbacks[e] = cb;
 }
 
