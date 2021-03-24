@@ -36,7 +36,16 @@ GamePeer.prototype._receiveMessage = function(e) {
 }
 
 GamePeer.prototype._dataChannelOpen = function(remotePeerId) {
-  console.log('DATA CHANNEL OPEN');
+  console.log(`[${remotePeerId}] data channel open`);
+
+  // check if all channels are open
+  if (this.isMasterPeer && Object.values(this.connections).every((connection) => {
+    return connection.dc && connection.dc.readyState === 'open'
+  })) {
+    // notify slave peers
+    this.broadcast('master-peer-ready');
+    if (this.callbacks['master-peer-ready']) this.callbacks['master-peer-ready']();
+  }
 }
 
 GamePeer.prototype._createConnection = function(remotePeerId, rtcConfiguration, isInitiator) {
@@ -48,7 +57,7 @@ GamePeer.prototype._createConnection = function(remotePeerId, rtcConfiguration, 
     // setup a reliable and ordered data channel, store in connection object
     connection.dc = connection.createDataChannel('dc');
     connection.dc.onmessage = (e) => this._receiveMessage(e);
-    connection.dc.onopen = () => this._dataChannelOpen();
+    connection.dc.onopen = () => this._dataChannelOpen(remotePeerId);
   } else {
     // otherwise, we need to receive the data channel and store them in the connection object
     connection.ondatachannel = (e) => {
@@ -93,13 +102,6 @@ GamePeer.prototype.connect = function(remotePeerId) {
       });
     })
   });
-  /*connection.setLocalDescription(await connection.createOffer());
-  this.sendSignal({         // signal the remote peer to inform them of our offer
-    type : 'offer',         // tell the remote peer what type of signal this is
-    src : this.id,          // tell the remote peer (and signaling server) who this signal is from
-    target : remotePeerId,  // tell the remote peer (and signaling server) who this signal is addressed to
-    data : connection.localDescription // offer is our local description
-  });*/
 }
 
 GamePeer.prototype.onsignal = function(e) {
@@ -119,25 +121,19 @@ GamePeer.prototype.onsignal = function(e) {
             })
           });
         });
-        //await connection.setLocalDescription(await connection.createAnswer());
-        //this.sendSignal(this._createSignal('answer', connection.localDescription, e.src));
         break;
       // on answer, set our remote description
       case 'answer':
         this.connections[e.src].setRemoteDescription(e.data).then();
-        //await this.connections[e.src].setRemoteDescription(e.data);
         break;
-      // (trickle-ice) on ice-candidate, add it to our list of candidates
       case 'ice-candidate':
         this.connections[e.src].addIceCandidate(e.data).then();
-        //await this.connections[e.src].addIceCandidate(e.data);
         break;
     }
   }
 }
 
 GamePeer.prototype.on = function(e, cb) {
-  console.log(e);
   this.callbacks[e] = cb;
 }
 

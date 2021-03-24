@@ -16,6 +16,8 @@ export function ConnectionManager(localPeer) {
   this.playerMeta = new PlayerMetaDataContainer();
 
   this.socket.on('host-migration', (masterPeerId) => {
+    $('#btn-generate-random-number').prop('disabled', true);
+
     localPeer.closeConnections();
 
     if (masterPeerId === localPeer.id) {
@@ -56,6 +58,8 @@ export function ConnectionManager(localPeer) {
 
   // setup callback when a client joins our current room
   this.socket.on('client-connecting', (client) => {
+    $('#btn-generate-random-number').prop('disabled', true);
+
     const meta = new PlayerMetaData(client.name, client.peerId, client.socket);
     this.playerMeta.addPlayer(meta);
     appendMessageToChat(createMessage(client.peerId, `'${client.name}' is connecting.`), meta.name);
