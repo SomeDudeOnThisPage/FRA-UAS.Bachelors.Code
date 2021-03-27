@@ -1,123 +1,95 @@
-import {PlayerMetaData, PlayerMetaDataContainer} from "./PlayerMeta.js";
 import {appendMessageToChat, createMessage} from "../chatUtils.js";
 
-/**
- * Handles interfacing between socket-client and peers via PlayerMetaData.
- * Handles the connection aspects of connecting, disconnecting, signal, joining, as well as creating and leaving rooms.
- *
- * This class holds a PlayerMetaDataContainer which contains data used to cross-reference signaling- (socket) and
- * peer- (UUID) IDs.
- *
- * @constructor
+/*
+ * Handles socket callbacks and manages a list of players.
  */
-export function ConnectionManager(localPeer) {
-  this.socket = io('http://localhost:1234'); // TODO: dynamic
+export function ConnectionManager(peer) {
+  this.socket = io('http://localhost:1234');
+  this.players = [];
   this.room = undefined;
-  this.playerMeta = new PlayerMetaDataContainer();
+  this.masterPeerId = undefined;
 
-  this.socket.on('host-migration', (masterPeerId) => {
-    $('#btn-generate-random-number').prop('disabled', true);
+  // WE have JOINED (or created, as we join a created room by default) a game room
+  this.socket.on('game-room-joined', (id, clients, hostPeerId) => {
+    this.room = id;
+    this.masterPeerId = hostPeerId;
 
-    localPeer.closeConnections();
+    peer.isMasterPeer = hostPeerId === peer.id;
+    console.log(peer.isMasterPeer ? 'we are the host peer' : 'we are a client peer');
+    console.log('room id', this.room);
 
-    if (masterPeerId === localPeer.id) {
-      // if we are the master, let other peers connect
-      console.log('[HOST MIGRATION] we are now the master peer');
-      localPeer.isMasterPeer = true;
-    } else {
-      console.log('[HOST MIGRATION] we are now a slave peer');
-      localPeer.connect(masterPeerId);
-    }
-  });
+    this.players = clients;
 
-  // handle joining a room and connecting to all other peers in that room
-  this.socket.on('joined-room', (roomName, clients, masterPeerId) => {
+    this.socket.emit('request-turn-credentials'); // request our TURN credentials
 
-    this.room = roomName;
-
-    clients.forEach((client) => {
-      if (client.peerId !== localPeer.id) {
-        this.playerMeta.addPlayer(new PlayerMetaData(client.name, client.peerId, client.socket));
-      }
-    });
-
-    if (masterPeerId === localPeer.id) {
-      // if we are the master, let other peers connect
-      console.log('we are the master peer');
-      localPeer.isMasterPeer = true;
-    } else {
-      // otherwise, connect to the master peer
-      console.log('we are a slave peer - our master peer is  [' + masterPeerId + ']');
-      localPeer.connect(masterPeerId); // => last joined clients is ALWAYS the initiator to all other clients
-    }
-
-    // TODO: move this...
+    // Enable game page - TODO: move this...
     $('#connect-page').css({'display' : 'none'});
     $('#game-page').css({'display' : 'block'});
+    $('#room-id').html(`Room-Code: <b>${id}</b>`);
   });
 
-  // setup callback when a client joins our current room
-  this.socket.on('client-connecting', (client) => {
+  // WE have received our TURN credentials
+  this.socket.on('request-turn-credentials-response', (servers) => {
+    // set our TURN credentials
+    peer.setICEServers(servers);
+
+    // once we have our TURN credentials, we can begin connecting to our master peer
+    // if we are the master peer, do nothing and wait for incoming connections
+    if (!peer.isMasterPeer) {
+      peer.connect(this.masterPeerId);
+    }
+  });
+
+  // ANOTHER PLAYER is JOINING the game room
+  this.socket.on('game-room-client-joining', (client) => {
     $('#btn-generate-random-number').prop('disabled', true);
 
-    const meta = new PlayerMetaData(client.name, client.peerId, client.socket);
-    this.playerMeta.addPlayer(meta);
-    appendMessageToChat(createMessage(client.peerId, `'${client.name}' is connecting.`), meta.name);
+    this.players.push(client);
+    appendMessageToChat(createMessage(client.peerId, `'${client.name}' is connecting.`), client.name);
   });
 
-  // setup callback when a client leaves our current room
-  this.socket.on('client-disconnect', (client) => {
-    const meta = this.playerMeta.getPlayerBySocketId(client.socket);
-    if (meta) {
-      appendMessageToChat(createMessage(client.peerId, `'${client.name}' disconnected.`), meta.name);
-      this.playerMeta.removePlayerByPeerId(client.peerId);
+  // ANOTHER PLAYER is LEAVING the game room
+  this.socket.on('game-room-client-leaving', (client) => {
+    if (this.players.find((player) => player.peerId === client.peerId)) {
+      // if the player exists, append a notification chat message and close the connection
+      this.players = this.players.filter((player) => player.peerId !== client.peerId);
+      appendMessageToChat(createMessage(client.peerId, `'${client.name}' disconnected.`), client.name);
+
+      peer.closeConnection(client.peerId);
     }
-
-    // terminate peer connection
-    localPeer.closeConnection(client.peerId);
   });
 
-  // pass on signals to our local peer
+  // the HOST has LEFT the game room - receive new HOST id, re-establish connection to new host
+  this.socket.on('game-room-host-migration', (masterPeerId) => {
+    $('#btn-generate-random-number').prop('disabled', true);
+
+    peer.closeConnections(); // close any open connections
+
+    this.masterPeerId = masterPeerId;
+    peer.isMasterPeer = peer.id === this.masterPeerId;
+
+    // re-connect all client peers (if they do not have their credentials yet, they will connect upon receiving them)
+    if (peer.rtcConfiguration.iceServers && !peer.isMasterPeer) {
+      peer.connect(this.masterPeerId);
+    }
+  });
+
+  // signaling
   this.socket.on('signal', (e) => {
-    localPeer.onsignal(e);
+    peer.onsignal(e);
   });
 
-  this.socket.on('wrong-room', () => {
-    alert('If you tried to create a room, this room already exists. Try joining the room! If you' +
-      'tried to join a room, this room doesn\'t exist. Try creating the room!');
-  });
-
-  this.socket.on('wrong-password', () => {
-    alert('Wrong Password!');
-  });
-
-  this.setupEvents(localPeer);
+  this.setupEvents(peer);
 }
 
-ConnectionManager.prototype.setupEvents = function(localPeer) {
-  // handle create / join page
-  $('#create-lobby-submit').click(() => {
-    const playerName = $('#player-name').val();
+ConnectionManager.prototype.setupEvents = function(peer) {
+  $('#create-lobby-submit').click(() => this.socket.emit('game-room-create', 'test', {
+    peerId : peer.id,
+    name : $('#player-name').val()
+  }));
 
-    // todo: room password
-    this.socket.emit('create-room', $('#join-lobby-name').val(), 'test', {
-      socket : this.socket.id,
-      peerId : localPeer.id,
-      name : playerName
-    });
-
-    this.playerMeta.addPlayer(new PlayerMetaData(playerName, localPeer.id, this.socket.id));
-  });
-
-  $('#join-lobby-submit').click(() => {
-    const playerName = $('#player-name').val();
-
-    this.socket.emit('join-room', $('#join-lobby-name').val(), 'test', {
-      socket : this.socket.id,
-      peerId : localPeer.id,
-      name : playerName
-    });
-
-    this.playerMeta.addPlayer(new PlayerMetaData(playerName, localPeer.id, this.socket.id));
-  });
+  $('#join-lobby-submit').click(() => this.socket.emit('game-room-join', $('#join-lobby-name').val(), 'test', {
+    peerId : peer.id,
+    name : $('#player-name').val()
+  }));
 }

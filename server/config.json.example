@@ -1,0 +1,14 @@
+# create config.json in the same directory as Server.js
+# fill it with the following structure:
+{
+    "ice" : {
+      "stunServerAddress": "# DNS or IP address of the STUN server, preceded by 'stun:'",
+      "turnServerAddress": "# DNS or IP address of the STUN server, preceded by 'turn:'",
+      "staticAuthSecret": "# static auth secret as configured in coturn server",
+      "staticAuthCredentialLifetime": "# lifetime of a generated static auth credential set in hours"
+    },
+    "server" : {
+      "listeningAddress" : "# your listening ip address",
+      "listeningPort": "# your listening port (number)"
+    }
+}

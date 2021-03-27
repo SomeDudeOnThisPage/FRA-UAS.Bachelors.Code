@@ -1,0 +1,21 @@
+# data in <> hidden because I'd like to be the only one using the turn server thanks for coming to my ted talk
+listening-port=3478
+listening-ip=0.0.0.0
+external-ip=<external-ip>/<internal-ip>
+
+min-port=10000
+max-port=20000
+
+# static auth secret
+# gen: HMAC (b64, sha1) of '<EndUnixTimeStamp>:<Username>' with passphrase = static-auth-secret
+# see node server script for example
+use-auth-secret
+static-auth-secret=<my-auth-secret>
+realm=<domain>.westeurope.cloudapp.azure.com
+
+stale-nonce
+fingerprint
+
+# a normal logfile only please thanks
+log-file=/var/log/turnserver.log
+verbose

@@ -1,9 +1,9 @@
 import {uuid4} from '../utils.js';
 
-export default function GamePeer(sendSignal, servers) {
+export default function GamePeer(sendSignal) {
   this.id = uuid4();
   this.callbacks = {};
-  this.servers = servers;        // ICE-Servers
+  this.rtcConfiguration = {iceTransportPolicy : 'relay'}; // relay testing
   this.connections = {};         // master has N-1 connections, slaves have only one connection to their master
   this.sendSignal = sendSignal;  // callback to send a signaling message to a remote peer
   this.isMasterPeer = false;     // decided by signaling server on joining a room
@@ -22,8 +22,23 @@ GamePeer.prototype.closeConnection = function(remotePeerId) {
   }
 }
 
+GamePeer.prototype.setICETransportPolicy = function(policy) {
+  if (policy !== 'relay' || policy !== 'all') {
+    console.error('ICE transport policy must be of values [relay, all]');
+    return;
+  }
+
+  this.rtcConfiguration.iceTransportPolicy = policy;
+}
+
+GamePeer.prototype.setICEServers = function(servers) {
+  this.rtcConfiguration.iceServers = servers;
+}
+
 GamePeer.prototype._receiveMessage = function(e) {
   const message = JSON.parse(e.data);
+
+  console.log('_ReceiveMessage', e);
 
   if (this.isMasterPeer) {
     // if the message is targeted, emit to target peer - else relay to all other peers
@@ -38,11 +53,9 @@ GamePeer.prototype._receiveMessage = function(e) {
 GamePeer.prototype._dataChannelOpen = function(remotePeerId) {
   console.log(`[${remotePeerId}] data channel open`);
 
-  // check if all channels are open
-  if (this.isMasterPeer && Object.values(this.connections).every((connection) => {
-    return connection.dc && connection.dc.readyState === 'open'
-  })) {
-    // notify slave peers
+  // if we are the host peer, check if all channels are open
+  if (this.isMasterPeer && Object.values(this.connections).every((c) => c.dc && c.dc.readyState === 'open')) {
+    // notify client peers (and ourselves, so it is symmetrical whether we are a host or client peer)
     this.broadcast('master-peer-ready');
     if (this.callbacks['master-peer-ready']) this.callbacks['master-peer-ready']();
   }
@@ -61,7 +74,6 @@ GamePeer.prototype._createConnection = function(remotePeerId, rtcConfiguration, 
   } else {
     // otherwise, we need to receive the data channel and store them in the connection object
     connection.ondatachannel = (e) => {
-      console.log('ondatachannel', e);
       if (e.channel) {
         connection.dc = e.channel;
         connection.dc.onmessage = (e) => this._receiveMessage(e);
@@ -74,6 +86,13 @@ GamePeer.prototype._createConnection = function(remotePeerId, rtcConfiguration, 
     console.log(`[${remotePeerId}] signaling state '${connection.signalingState}'`);
   }
 
+  connection.onicecandidate = (e) => {
+    console.log('icecandidate', e);
+    if (e.candidate) {// e.candidate === null means we finished gathering ice candidates
+      this.sendSignal(this._createSignal('ice-candidate', e.candidate, remotePeerId));
+    }
+  }
+
   return connection;
 }
 
@@ -84,13 +103,6 @@ GamePeer.prototype._createSignal = function(type, data, target) {
 GamePeer.prototype.connect = function(remotePeerId) {
   const connection = this._createConnection(remotePeerId, this.servers, true);
   this.connections[remotePeerId] = connection;
-
-  connection.onicecandidate = (e) => {
-    console.log('icecandidate', e);
-    if (e.candidate) {// e.candidate === null means we finished gathering ice candidates
-      this.sendSignal(this._createSignal('ice-candidate', e.candidate, remotePeerId));
-    }
-  }
 
   connection.createOffer().then((offer) => {
     connection.setLocalDescription(offer).then(() => {
@@ -127,7 +139,9 @@ GamePeer.prototype.onsignal = function(e) {
         this.connections[e.src].setRemoteDescription(e.data).then();
         break;
       case 'ice-candidate':
-        this.connections[e.src].addIceCandidate(e.data).then();
+        this.connections[e.src].addIceCandidate(e.data).then(() => {
+          console.log('ay lemo');
+        });
         break;
     }
   }
@@ -153,6 +167,8 @@ GamePeer.prototype.relay = function(exclude, packet) { // function for the maste
 
 GamePeer.prototype.broadcast = function(e, ...args) { // function for any peer to broadcast a message
   Object.values(this.connections).forEach((connection) => {
-    connection.dc.send(JSON.stringify({src : this.id, event: e, data: args}));
+    const data = JSON.stringify({src : this.id, event: e, data: args});
+    console.log(data);
+    connection.dc.send(data);
   });
 }

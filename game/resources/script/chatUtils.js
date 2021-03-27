@@ -1,28 +1,24 @@
-/*
- * Utility methods to manage the chat box...
- */
+const getPlayer = (players, id) => {
+  return players.find((player) => player.peerId === id);
+}
 
-export const setupChatEvents = (localPeer, playerMeta) => {
+export const setupChatEvents = (peer, connection) => {
   // create default event handlers
   $('#chat-input-submit').click(() => {
-    // submit message with our local players' name
-    submitMessage(localPeer, playerMeta.getPlayerByPeerId(localPeer.id).name);
+    submitMessage(peer, getPlayer(connection.players, peer.id).name);
   });
 
   $('#chat-input').keypress((e) => {
-    if (e.which === 13) { // ENTER
-      // submit message with our local players' name
-      submitMessage(localPeer, playerMeta.getPlayerByPeerId(localPeer.id).name);
-    }
+    if (e.which === 13) { submitMessage(peer, getPlayer(connection.players, peer.id).name); }
   });
 
   // handle local peer chat event
-  localPeer.on('chat', (packet) => {
+  peer.on('chat', (packet) => {
     if (packet && packet.src) {
       // chat messages are sent over WebRTC data channels, so packet.src is a peerId
-      const meta = playerMeta.getPlayerByPeerId(packet.src);
-      if (meta && meta.name) {
-        appendMessageToChat(packet, meta.name);
+      const player = getPlayer(connection.players, packet.src);
+      if (player && player.name) {
+        appendMessageToChat(packet, player.name);
       }
     }
   });
@@ -33,12 +29,6 @@ export const destroyChatEvents = () => {
   $('#chat-input').off('click');
 }
 
-/**
- * Utility method for creating a generic message-object.
- * @param src
- * @param message
- * @returns {{from, time: number, message}}
- */
 export const createMessage = (src, message) => {
   return {
     src : src,
@@ -47,27 +37,14 @@ export const createMessage = (src, message) => {
   };
 }
 
-/**
- * Submits a message, this message will be sent to all other peers, as well as be added to our local chatbox.
- * @param localPeer
- * @param name
- */
-export const submitMessage = (localPeer, name) => {
+export const submitMessage = (peer, name) => {
   const chatInput = $('#chat-input');
   const message = chatInput.val()
 
   if (message && message !== '') {
-
-    // create message
-    const msg = createMessage(localPeer.id, message);
-
-    // broadcast message to peers
-    localPeer.broadcast('chat', msg);
-
-    // append message to our own local chatbox
+    const msg = createMessage(peer.id, message);
+    peer.broadcast('chat', msg);
     appendMessageToChat(msg, name);
-
-    // clear input
     chatInput.val('');
   }
 }
