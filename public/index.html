@@ -11,11 +11,11 @@
 
   <script src='https://cdnjs.cloudflare.com/ajax/libs/socket.io/3.1.0/socket.io.min.js'></script>
 
-  <script src='./lib/javascript-state-machine.min.js'></script>
+  <script src='lib/javascript-state-machine.min.js'></script>
 
-  <script src="./resources/script/index.js" type="module"></script>
+  <script src="/resources/script/index.js" type="module"></script>
 
-  <link rel="stylesheet" href="./resources/css/index.css"/>
+  <link rel="stylesheet" type="text/css" href="/resources/css/index.css"/>
 </head>
   <body>
 
@@ -34,7 +34,6 @@
 
       <div class="container">
 
-        <!-- The poor mans' single page application -->
         <div id="connect-page">
           <div class="card mt-5">
             <div class="card-body">
@@ -54,62 +53,11 @@
           </div>
         </div>
 
-        <div id="game-page">
-          <div class="row mb-1 mt-4">
-
-            <div class="col-lg-8">
-              <!-- game container -->
-              <div id="container-outer" class="bg-light d-flex justify-content-center border border-dark rounded-0">
-                <div id="game-container-outer" class="ratio ratio-1x1">
-                  <div id="red-outline">
-                    <div id="second-yellow-outline">
-                      <div id="maedn"></div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <!-- chat row -->
-              <div class="row">
-                <div class="col-lg pt-1">
-                  <div class="border border-dark rounded-0">
-                    <!-- chatbox message display -->
-                    <div id="chat-message-box" class="border border-dark border-top-0 border-start-0 border-end-0 rounded-0 bg-light">
-
-                    </div>
-
-                    <!-- chatbox input -->
-                    <div class="input-group">
-                      <input id="chat-input" type="text" class="form-control border rounded-0" placeholder="Chat..." aria-label="Chat..." aria-describedby="basic-addon2">
-                      <div class="input-group-append">
-                        <button id="chat-input-submit" class="btn btn-dark rounded-0" type="button">Send</button>
-                      </div>
-                    </div>
-
-                  </div>
-
-                </div>
-              </div>
-
-            </div>
-
-            <!-- content col -->
-            <div class="col-lg border border-dark">
-              <p>Should probably add some stuff here</p>
-              <button id="btn-generate-random-number" type="button">Lockstep Random Number Generation</button>
-              <p id="p-fair-number"></p>
-              <button id="makemove" type="button">Test: Make Move</button>
-            </div>
-
-          </div>
-        </div>
-
-      </div>
-    </div>
-
     <div class="footer bg-light">
       <p class="text-danger">I am a footer!</p>
     </div>
 
+    </div>
+    </div>
   </body>
 </html>

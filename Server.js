@@ -1,7 +1,7 @@
-const crypto = require('crypto'); // for credential generation
-const RoomManager = require('./RoomManager.js');
-
+const express = require('express');
+const crypto = require('crypto');
 const config = require('./config.json');
+const RoomManager = require('./RoomManager.js');
 
 /*
  * Signaling and Room-Management Server for my Thesis Project.
@@ -19,32 +19,28 @@ const config = require('./config.json');
  *
  * This server is used to generate TURN user credentials for the CoTurn
  * server as well - using the 'request-turn-credentials' event listener
- *
- * The server reacts to the following events:
- * 1. request-turn-credentials
- *    -> generates a set of ICE-Servers with temporary credentials for the client
- *    -> returns them via the request-turn-credentials-response event to the calling client
- * 2. game-room-create (password, client)
- *    -> creates a new room and puts the client inside
- *    -> results in the event 'game-room-joined' for the calling client
- *    -> results in the event 'game-room-client-joining' for all clients in the room
- * 3. game-room-join (id, password, client)
- *    -> puts a client in a room, removing them from any room they are currently in
- *    -> results in the event 'game-room-joined' for the calling client
- *    -> results in the event 'game-room-client-joining' for all clients in the room
- *
- * TODO: list others here too
  */
 
-const server = require('http').createServer((req, res) => res.end()).listen(
-  config.server.listeningPort, config.server.listeningAddress
-);
+const app = express();
 
-// set cors origin to wildcard to allow chrome browsers to connect to this server
-// as this is only a prototype for testing, this should suffice
-const io = require('socket.io')(server, {cors : {origin : '*'}});
+const server = require('http').Server(app, () => {});
+const io = require('socket.io')(server);
+app.use(express.static("public"));
 
-// room manager for managing clients joining and leaving rooms, as well as host migration
+app.get('/', (req, res) => {
+  res.status(200);
+  res.sendFile(`${__dirname}${config.server.index}`);
+});
+
+app.get(`/game/*/`, (req, res) => {
+  res.status(200);
+  console.log(__dirname);
+  res.sendFile(`${__dirname}/public/game.html`);
+});
+
+server.listen(config.server.listeningPort);
+
+//const io = new Server(config.server.listeningPort, {cors : config.server.cors ? config.server.cors : undefined});
 const manager = new RoomManager();
 
 io.sockets.on('connection', (socket) => {
@@ -68,11 +64,19 @@ io.sockets.on('connection', (socket) => {
     ]);
   });
 
-  socket.on('game-room-create', (password, client) => manager.addClientToRoom(client, manager.createRoom(password), socket));
+  socket.on('game-room-create', (password) => {
+    const room = manager.createRoom(app, password);
+    socket.emit('game-room-created', room);
+
+    // if no client joins within a minute, destroy the room again (something went wrong on the clients' side, as the
+    // redirect didn't go through)
+    setTimeout(() => {
+      manager.destroyRoom(room);
+    }, 60000);
+  });
 
   socket.on('game-room-join', (id, password, joiner) => {
     const room = manager.getRoom(id);
-    console.log(id);
 
     if (!room) return socket.emit('game-room-join-failed', 'no such room');
     if (room.passphrase !== password) return socket.emit('game-room-join-failed', 'wrong password');

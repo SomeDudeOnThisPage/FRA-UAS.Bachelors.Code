@@ -3,7 +3,7 @@ const RoomManager = function() {
   this.rooms = {};   // room : [client, client, client, ...]
 }
 
-RoomManager.prototype.createRoom = function(passphrase) {
+RoomManager.prototype.createRoom = function(app, passphrase) {
   // generate 4 digit id - this is a very bad implementation but its a prototype soooo...
   let id = Math.random().toString(36).replace(/[^a-z]+/g, '').substr(0, 4);
   while (this.rooms[id]) {
@@ -70,10 +70,14 @@ RoomManager.prototype.removeClientFromRoom = function(socketId, roomId, socket) 
     room.clients.forEach((client) => socket.to(client.socket).emit('game-room-host-migration', room.hostPeerId));
   }
 
+  this.destroyRoom(roomId);
+}
+
+RoomManager.prototype.destroyRoom = function(id, force) {
   // delete a room if there are no players inside
-  if (room.clients.length <= 0) {
-    console.log('[ROOM REMOVED]', roomId);
-    delete this.rooms[roomId];
+  if (this.rooms[id] && this.rooms[id].clients.length <= 0 || force) {
+    console.log('[ROOM REMOVED]', id);
+    delete this.rooms[id];
   }
 }
 

@@ -146,7 +146,7 @@ const makeTiles = (board) => {
 
     if (i === 20) {
       const img = $('<img id="dynamic">');
-      img.attr('src', './resources/img/Letter_A.svg');
+      img.attr('src', '/resources/img/Letter_A.svg');
       img.css({
         'width' : '90%',
         'height' : '90%',
@@ -189,7 +189,7 @@ export function GameTest(root, localPlayerId) {
   this.diceRoll = undefined;
 
   const self = this;
-  this.fsmGame = new StateMachine({
+  /*this.fsmGame = new StateMachine({
     init : 'dice',
     transitions : [
       //{ name : 'startGame', from : 'start', to : 'dice' },
@@ -216,24 +216,10 @@ export function GameTest(root, localPlayerId) {
       onLockstepCommitFinished: () => { console.log('----------------- LOCKSTEP COMMIT FINISHED -----------------') },
       onLockstepRevealFinished: () => { console.log('----------------- LOCKSTEP REVEAL FINISHED -----------------') },
     }
-  });
+  });*/
 }
 
 GameTest.prototype.render = function() {
   this.root.empty(); // todo: only recreate figures here or something
   makeTiles(this.root);
-}
-
-GameTest.prototype.throwDice = function(number) {
-  if (this.fsmGame.state === 'dice') {
-    this.diceRoll = number;
-    this.fsmGame.diceThrown(number);
-  }
-}
-
-GameTest.prototype.makeMove = function() {
-  if (this.fsmGame.state === 'move') {
-    this.fsmGame.madeMove();
-    this.currentPlayer = this.currentPlayer++ % 4;
-  }
 }

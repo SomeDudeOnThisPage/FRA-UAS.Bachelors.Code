@@ -19,6 +19,10 @@ body {
     display: none;
 }
 
+#room-id {
+    visibility : hidden;
+}
+
 #chat-message-box {
     height: 125px;
     padding: 5px;

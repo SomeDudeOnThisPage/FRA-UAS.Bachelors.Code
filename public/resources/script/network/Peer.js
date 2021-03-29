@@ -1,28 +1,28 @@
 import {uuid4} from '../utils.js';
 
-export default function GamePeer(sendSignal) {
+export default function Peer() {
   this.id = uuid4();
   this.callbacks = {};
   this.rtcConfiguration = {iceTransportPolicy : 'relay'}; // relay testing
   this.connections = {};         // master has N-1 connections, slaves have only one connection to their master
-  this.sendSignal = sendSignal;  // callback to send a signaling message to a remote peer
+  this.sendSignal = undefined;   // callback to send a signaling message to a remote peer
   this.isMasterPeer = false;     // decided by signaling server on joining a room
 }
 
-GamePeer.prototype.closeConnections = function() {
+Peer.prototype.closeConnections = function() {
   Object.values(this.connections).forEach((connection) => {
     connection.close();
   });
 }
 
-GamePeer.prototype.closeConnection = function(remotePeerId) {
+Peer.prototype.closeConnection = function(remotePeerId) {
   if (this.connections[remotePeerId]) {
     this.connections[remotePeerId].close();
     delete this.connections[remotePeerId];
   }
 }
 
-GamePeer.prototype.setICETransportPolicy = function(policy) {
+Peer.prototype.setICETransportPolicy = function(policy) {
   if (policy !== 'relay' || policy !== 'all') {
     console.error('ICE transport policy must be of values [relay, all]');
     return;
@@ -31,11 +31,15 @@ GamePeer.prototype.setICETransportPolicy = function(policy) {
   this.rtcConfiguration.iceTransportPolicy = policy;
 }
 
-GamePeer.prototype.setICEServers = function(servers) {
+Peer.prototype.setICEServers = function(servers) {
   this.rtcConfiguration.iceServers = servers;
 }
 
-GamePeer.prototype._receiveMessage = function(e) {
+Peer.prototype.setSignalingCallback = function(cb) {
+  this.sendSignal = cb;
+}
+
+Peer.prototype._receiveMessage = function(e) {
   const message = JSON.parse(e.data);
 
   console.log('_ReceiveMessage', e);
@@ -50,7 +54,7 @@ GamePeer.prototype._receiveMessage = function(e) {
   }
 }
 
-GamePeer.prototype._dataChannelOpen = function(remotePeerId) {
+Peer.prototype._dataChannelOpen = function(remotePeerId) {
   console.log(`[${remotePeerId}] data channel open`);
 
   // if we are the host peer, check if all channels are open
@@ -61,18 +65,16 @@ GamePeer.prototype._dataChannelOpen = function(remotePeerId) {
   }
 }
 
-GamePeer.prototype._createConnection = function(remotePeerId, rtcConfiguration, isInitiator) {
-  const connection = new RTCPeerConnection(rtcConfiguration);
+Peer.prototype._createConnection = function(remotePeerId, isInitiator) {
+  const connection = new RTCPeerConnection(this.rtcConfiguration);
 
   if (isInitiator) {
-    console.log('connecting');
-
     // setup a reliable and ordered data channel, store in connection object
     connection.dc = connection.createDataChannel('dc');
     connection.dc.onmessage = (e) => this._receiveMessage(e);
     connection.dc.onopen = () => this._dataChannelOpen(remotePeerId);
   } else {
-    // otherwise, we need to receive the data channel and store them in the connection object
+    // otherwise, we need to receive the data channel and store it in the connection object
     connection.ondatachannel = (e) => {
       if (e.channel) {
         connection.dc = e.channel;
@@ -96,12 +98,12 @@ GamePeer.prototype._createConnection = function(remotePeerId, rtcConfiguration, 
   return connection;
 }
 
-GamePeer.prototype._createSignal = function(type, data, target) {
+Peer.prototype._createSignal = function(type, data, target) {
   return {type : type, src : this.id, target : target, data : data}
 }
 
-GamePeer.prototype.connect = function(remotePeerId) {
-  const connection = this._createConnection(remotePeerId, this.servers, true);
+Peer.prototype.connect = function(remotePeerId) {
+  const connection = this._createConnection(remotePeerId, true);
   this.connections[remotePeerId] = connection;
 
   connection.createOffer().then((offer) => {
@@ -116,7 +118,7 @@ GamePeer.prototype.connect = function(remotePeerId) {
   });
 }
 
-GamePeer.prototype.onsignal = function(e) {
+Peer.prototype.onsignal = function(e) {
   console.log(e);
   if (e.target && e.target === this.id) {
     switch(e.type) {
@@ -147,17 +149,17 @@ GamePeer.prototype.onsignal = function(e) {
   }
 }
 
-GamePeer.prototype.on = function(e, cb) {
+Peer.prototype.on = function(e, cb) {
   this.callbacks[e] = cb;
 }
 
-GamePeer.prototype.emit = function(target, packet) { // function for the master peer to relay a targeted message
+Peer.prototype.emit = function(target, packet) { // function for the master peer to relay a targeted message
   if (this.connections[target]) {
     this.connections[target].dc.send(packet);
   }
 }
 
-GamePeer.prototype.relay = function(exclude, packet) { // function for the master peer to relay a message
+Peer.prototype.relay = function(exclude, packet) { // function for the master peer to relay a message
   Object.keys(this.connections).forEach((key) => {
     if (key !== exclude) {
       this.connections[key].dc.send(packet);
@@ -165,7 +167,7 @@ GamePeer.prototype.relay = function(exclude, packet) { // function for the maste
   });
 }
 
-GamePeer.prototype.broadcast = function(e, ...args) { // function for any peer to broadcast a message
+Peer.prototype.broadcast = function(e, ...args) { // function for any peer to broadcast a message
   Object.values(this.connections).forEach((connection) => {
     const data = JSON.stringify({src : this.id, event: e, data: args});
     console.log(data);

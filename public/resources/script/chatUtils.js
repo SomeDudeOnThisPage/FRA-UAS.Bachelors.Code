@@ -2,21 +2,21 @@ const getPlayer = (players, id) => {
   return players.find((player) => player.peerId === id);
 }
 
-export const setupChatEvents = (peer, connection) => {
+export const setupChatEvents = (peer, room) => {
   // create default event handlers
   $('#chat-input-submit').click(() => {
-    submitMessage(peer, getPlayer(connection.players, peer.id).name);
+    submitMessage(peer, getPlayer(room.players, peer.id).name);
   });
 
   $('#chat-input').keypress((e) => {
-    if (e.which === 13) { submitMessage(peer, getPlayer(connection.players, peer.id).name); }
+    if (e.which === 13) { submitMessage(peer, getPlayer(room.players, peer.id).name); }
   });
 
   // handle local peer chat event
   peer.on('chat', (packet) => {
     if (packet && packet.src) {
       // chat messages are sent over WebRTC data channels, so packet.src is a peerId
-      const player = getPlayer(connection.players, packet.src);
+      const player = getPlayer(room.players, packet.src);
       if (player && player.name) {
         appendMessageToChat(packet, player.name);
       }
