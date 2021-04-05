@@ -80,8 +80,28 @@ io.sockets.on('connection', (socket) => {
 
     if (!room) return socket.emit('game-room-join-failed', 'no such room');
     if (room.passphrase !== password) return socket.emit('game-room-join-failed', 'wrong password');
+    if (room.clients.length >= 4) return socket.emit('game-room-join-failed', 'room full');
+    if (room.started) return socket.emit('game-room-join-failed', 'The Game has started, hot-joining sessions is currently not supported.');
 
     manager.addClientToRoom(joiner, id, socket);
+  });
+
+  socket.on('start-game', (roomId) => {
+    const room = manager.getRoom(roomId);
+    console.log(room.host === socket.id);
+
+    console.log('START', room, room.started, room.host, socket.id);
+    if (room && !room.started && room.host === socket.id) {
+      room.started = true;
+
+      // generate seed for random (in this case a random number is sufficient)
+      room.seed = Math.random();
+      console.log(room.seed);
+
+      // send random seed to players, and the socket starting the game (host)
+      room.clients.forEach((client) => socket.to(client.socket).emit('game-started', room.seed));
+      socket.emit('game-started', room.seed);
+    }
   });
 
   // WebRTC signaling

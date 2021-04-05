@@ -14,3 +14,32 @@ export const decryptNumber = (encrypted, passphrase) => {
   const json = JSON.parse(decrypted.toString(CryptoJS.enc.Utf8));
   return json.number;
 }
+
+export const rtcICECandidatePairStats = (connection, callback, interval) => {
+  return setInterval(() => {
+    connection.getStats().then((stats) => {
+      let selectedPairId = null;
+      for(const [key, stat] of stats){
+        if(stat.type === "transport"){
+          selectedPairId = stat.selectedCandidatePairId;
+          break;
+        }
+      }
+
+      let candidatePair = stats.get(selectedPairId);
+
+      if(!candidatePair){
+        for(const [key, stat] of stats){
+          if(stat.type === "candidate-pair" && stat.selected){
+            candidatePair = stat;
+            break;
+          }
+        }
+      }
+
+      if (candidatePair) {
+        callback(stats, candidatePair);
+      }
+    });
+  }, interval);
+}

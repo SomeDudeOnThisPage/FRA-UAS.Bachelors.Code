@@ -10,7 +10,7 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/3.1.2/rollups/aes.js"></script>
 
   <script src='https://cdnjs.cloudflare.com/ajax/libs/socket.io/3.1.0/socket.io.min.js'></script>
-
+  <script src="//cdnjs.cloudflare.com/ajax/libs/seedrandom/3.0.5/seedrandom.min.js"></script>
   <script src="/resources/script/game.js" type="module"></script>
 
   <link rel="stylesheet" href="/resources/css/index.css"/>
@@ -73,12 +73,13 @@
 
         <!-- content col -->
         <div class="col-lg border border-dark">
-          <p>Should probably add some stuff here</p>
-          <button id="btn-generate-random-number" type="button">Lockstep Random Number Generation</button>
+          <button id="btn-generate-random-number" type="button" disabled>Throw Dice</button>
           <p id="p-fair-number"></p>
-          <button id="makemove" type="button">Test: Make Move</button>
-        </div>
+          <button id="makemove" type="button">Test: Make Move</button><br  >
+          <p id="current-player"></p>
 
+          <button id="start-game" type="button" disabled>[HOST]: Start Game</button>
+          <button id="end-game" type="button" disabled>[HOST]: End Game</button>
       </div>
     </div>
 

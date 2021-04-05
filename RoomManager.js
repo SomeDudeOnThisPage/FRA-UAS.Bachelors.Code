@@ -3,7 +3,7 @@ const RoomManager = function() {
   this.rooms = {};   // room : [client, client, client, ...]
 }
 
-RoomManager.prototype.createRoom = function(app, passphrase) {
+RoomManager.prototype.createRoom = function(app, passphrase, host) {
   // generate 4 digit id - this is a very bad implementation but its a prototype soooo...
   let id = Math.random().toString(36).replace(/[^a-z]+/g, '').substr(0, 4);
   while (this.rooms[id]) {
@@ -13,7 +13,9 @@ RoomManager.prototype.createRoom = function(app, passphrase) {
   this.rooms[id] = {
     clients : [],
     passphrase : passphrase,
-    hostPeerId : undefined
+    host : undefined,
+    started : false,
+    seed : undefined // generated on game start
   };
   return id;
 }
@@ -24,6 +26,22 @@ RoomManager.prototype.addClientToRoom = function(joiner, roomId, socket) {
   // it's easier to forward signal when storing the socket id of the client in the client object...
   joiner.socket = socket.id;
 
+  // give the client a player index - this index is the first free index between 0-3
+  // I'M SURE THERE IS A MORE EFFICIENT WAY TO DO THIS BUT I WAS LAZY!!!
+  const usedPlayerIndices = room.clients.map((client) => client.playerIndex);
+  if (!usedPlayerIndices.includes(0)) {
+    joiner.playerIndex = 0;
+  }
+  else if (!usedPlayerIndices.includes(2)) { // fill slot 2 first because it makes for a better game experience
+    joiner.playerIndex = 2;
+  }
+  else if (!usedPlayerIndices.includes(1)) {
+    joiner.playerIndex = 1;
+  }
+  else if (!usedPlayerIndices.includes(3)) {
+    joiner.playerIndex = 3;
+  }
+
   // remove the joiner from any rooms they are currently in (room switching)
   if (this.clients[joiner.socket]) {
     this.removeClientFromRoom(joiner.socket, this.clients[joiner.socket], socket);
@@ -32,15 +50,16 @@ RoomManager.prototype.addClientToRoom = function(joiner, roomId, socket) {
   // add / update the joiners current room id
   this.clients[joiner.socket] = roomId;
 
-  // if there is no host in the room, assign the joiner peer as host
-  if (!room.hostPeerId) {room.hostPeerId = joiner.peerId;}
+  // if there is no host in the room, assign the joiner as host
+  if (!room.host) {room.host = joiner.socket;}
 
   // add the joiner to the list of clients in the room
   room.clients.push(joiner);
 
   // notify the joining client with the data they need to establish peer connections
   // (other clients in the room, room id and peer id of the host)
-  socket.emit('game-room-joined', roomId, room.clients, room.hostPeerId);
+  console.log(room.host, socket.id, joiner.socket.id);
+  socket.emit('game-room-joined', room.clients, room.host === socket.id);
 
   // notify the rest of the clients in the room that the joiner is joining
   room.clients.forEach((client) => socket.to(client.socket).emit('game-room-client-joining', joiner));
@@ -62,13 +81,12 @@ RoomManager.prototype.removeClientFromRoom = function(socketId, roomId, socket) 
   room.clients.forEach((client) => socket.to(client.socket).emit('game-room-client-leaving', leaver));
 
   // check if we need to migrate the host (the leaver was host and there's players in the room)
-  if (leaver.peerId === room.hostPeerId && room.clients.length > 0) {
-    room.hostPeerId = room.clients[0].peerId;
-    console.log('[HOST MIGRATION]', roomId, room.hostPeerId);
+  /*if (leaver.socket === room.host && room.clients.length > 0) {
+    room.host = room.clients[0].socket;
 
     // notify the other clients that they need to connect to the new host
-    room.clients.forEach((client) => socket.to(client.socket).emit('game-room-host-migration', room.hostPeerId));
-  }
+    room.clients.forEach((client) => socket.to(client.socket).emit('game-room-host-migration', this.getHost(roomId).peerId));
+  }*/
 
   this.destroyRoom(roomId);
 }

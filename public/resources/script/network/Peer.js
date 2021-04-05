@@ -1,9 +1,9 @@
-import {uuid4} from '../utils.js';
+import {rtcICECandidatePairStats, uuid4} from '../utils.js';
 
 export default function Peer() {
   this.id = uuid4();
   this.callbacks = {};
-  this.rtcConfiguration = {iceTransportPolicy : 'relay'}; // relay testing
+  this.rtcConfiguration = {iceTransportPolicy : 'all'}; // relay testing
   this.connections = {};         // master has N-1 connections, slaves have only one connection to their master
   this.sendSignal = undefined;   // callback to send a signaling message to a remote peer
   this.isMasterPeer = false;     // decided by signaling server on joining a room
@@ -12,18 +12,20 @@ export default function Peer() {
 Peer.prototype.closeConnections = function() {
   Object.values(this.connections).forEach((connection) => {
     connection.close();
+    clearInterval(connection.statsInterval);
   });
 }
 
 Peer.prototype.closeConnection = function(remotePeerId) {
   if (this.connections[remotePeerId]) {
     this.connections[remotePeerId].close();
+    clearInterval(this.connections[remotePeerId].statsInterval);
     delete this.connections[remotePeerId];
   }
 }
 
 Peer.prototype.setICETransportPolicy = function(policy) {
-  if (policy !== 'relay' || policy !== 'all') {
+  if (policy !== 'relay' && policy !== 'all') {
     console.error('ICE transport policy must be of values [relay, all]');
     return;
   }
@@ -42,12 +44,10 @@ Peer.prototype.setSignalingCallback = function(cb) {
 Peer.prototype._receiveMessage = function(e) {
   const message = JSON.parse(e.data);
 
-  console.log('_ReceiveMessage', e);
-
-  if (this.isMasterPeer) {
+  // if (this.isMasterPeer) {
     // if the message is targeted, emit to target peer - else relay to all other peers
-    message.target ? this.emit(message.target, e.data) : this.relay(message.src, e.data);
-  }
+  //   message.target ? this.emit(message.target, e.data) : this.relay(message.src, e.data);
+  // }
 
   if (message.event && this.callbacks[message.event]) {
     this.callbacks[message.event](...message.data, message.src)
@@ -58,10 +58,9 @@ Peer.prototype._dataChannelOpen = function(remotePeerId) {
   console.log(`[${remotePeerId}] data channel open`);
 
   // if we are the host peer, check if all channels are open
-  if (this.isMasterPeer && Object.values(this.connections).every((c) => c.dc && c.dc.readyState === 'open')) {
+  if (Object.values(this.connections).every((c) => c.dc && c.dc.readyState === 'open')) {
     // notify client peers (and ourselves, so it is symmetrical whether we are a host or client peer)
-    this.broadcast('master-peer-ready');
-    if (this.callbacks['master-peer-ready']) this.callbacks['master-peer-ready']();
+    if (this.callbacks['onDataChannelsOpen']) this.callbacks['onDataChannelsOpen']();
   }
 }
 
@@ -89,7 +88,6 @@ Peer.prototype._createConnection = function(remotePeerId, isInitiator) {
   }
 
   connection.onicecandidate = (e) => {
-    console.log('icecandidate', e);
     if (e.candidate) {// e.candidate === null means we finished gathering ice candidates
       this.sendSignal(this._createSignal('ice-candidate', e.candidate, remotePeerId));
     }
@@ -119,12 +117,10 @@ Peer.prototype.connect = function(remotePeerId) {
 }
 
 Peer.prototype.onsignal = function(e) {
-  console.log(e);
   if (e.target && e.target === this.id) {
     switch(e.type) {
       // on offer, create our answer, set our local description and signal the remote peer
       case 'offer':
-        console.log('OFFER', e.data);
         const connection = this._createConnection(e.src, this.servers, /* isInitiator */ false);
         this.connections[e.src] = connection;
 
@@ -142,7 +138,6 @@ Peer.prototype.onsignal = function(e) {
         break;
       case 'ice-candidate':
         this.connections[e.src].addIceCandidate(e.data).then(() => {
-          console.log('ay lemo');
         });
         break;
     }
@@ -153,9 +148,10 @@ Peer.prototype.on = function(e, cb) {
   this.callbacks[e] = cb;
 }
 
-Peer.prototype.emit = function(target, packet) { // function for the master peer to relay a targeted message
+Peer.prototype.emit = function(target, e, ...args) { // function for the master peer to relay a targeted message
   if (this.connections[target]) {
-    this.connections[target].dc.send(packet);
+    const data = JSON.stringify({src : this.id, event: e, data: args});
+    this.connections[target].dc.send(data);
   }
 }
 
@@ -170,7 +166,6 @@ Peer.prototype.relay = function(exclude, packet) { // function for the master pe
 Peer.prototype.broadcast = function(e, ...args) { // function for any peer to broadcast a message
   Object.values(this.connections).forEach((connection) => {
     const data = JSON.stringify({src : this.id, event: e, data: args});
-    console.log(data);
     connection.dc.send(data);
   });
 }

@@ -1,8 +1,9 @@
 import {decryptNumber, encryptNumber, uuid4} from "../utils.js";
 
-// TODO: Promise rejections
-
-export const random = (id, peer, playerAmount, random, init) => {
+// This promise initiates a distributed random number generation, and returns the sum of random numbers once it has
+// finished.
+// Note that this should also be initiated when the peer receives the 'ls-commit-init'-event, with 'init' set to false.
+export const random = (id, peer, playerAmount, random, player, init) => {
   const data = {
     id : id,
     passphrase : uuid4(),
@@ -12,60 +13,51 @@ export const random = (id, peer, playerAmount, random, init) => {
   }
 
   if (init) {
-    peer.broadcast('ls-commit-init', data.id);
+    peer.broadcast('ls-commit-init', data.id, player);
   }
 
-  return new Promise((res, rej) => {
+  return new Promise((resolve, reject) => {
     peer.broadcast('ls-commit', data.id, encryptNumber(random, data.passphrase)) // send our own commitment
 
-    commit(peer, playerAmount, data).then((commitments) => {
-      peer.broadcast('ls-action', id, data.passphrase);
+    commit(peer, playerAmount, data).then(() => {
+      let total = random;
+      Object.keys(data.actions).forEach((participant) => {
+        const commitment = data.commitments[participant];
+        const action = data.actions[participant];
 
-      resolve(peer, playerAmount, data).then((actions) => {
-        let total = random;
-        Object.keys(actions).forEach((participant) => {
-          const commitment = commitments[participant];
-          const action = actions[participant];
-
-          if (commitment && action) {
-            const randomNumber = decryptNumber(commitment, action);
-            console.log(`[${participant}] random number : ${randomNumber}`);
-            total += randomNumber;
-          }
-        });
-
-        res(total);
+        if (commitment && action) {
+          const randomNumber = decryptNumber(commitment, action);
+          // console.log(`[${participant}] random number : ${randomNumber}`);
+          total += randomNumber;
+        }
       });
+
+      resolve(total);
     });
   });
 }
 
 const commit = (peer, playerAmount, data) => {
   return new Promise((resolve, reject) => {
-    const commitments = {};
 
     peer.on('ls-commit', (id, commitment, remoteId) => {
-      if (id === data.id && !commitments[remoteId]) {
-        commitments[remoteId] = commitment;
+      if (id === data.id && !data.commitments[remoteId]) {
+        data.commitments[remoteId] = commitment;
 
-        if (Object.values(commitments).length === playerAmount - /* ourselves */ 1) {
-          resolve(commitments);
+        // broadcast our action when we have all commitments
+        if (Object.values(data.commitments).length === playerAmount - /* ourselves */ 1) {
+          peer.broadcast('ls-action', id, data.passphrase);
         }
       }
     });
-  });
-}
 
-const resolve = (peer, playerAmount, data) => {
-  return new Promise((resolve, reject) => {
-    const actions = {};
     peer.on('ls-action', (id, action, remoteId) => {
-      if (id === data.id && !actions[remoteId]) {
-        console.log('received action');
-        actions[remoteId] = action;
+      if (id === data.id && !data.actions[remoteId]) {
+        data.actions[remoteId] = action;
 
-        if (Object.keys(actions).length === playerAmount - /* ourselves */ 1) {
-          resolve(actions);
+        // resolve when we have all actions
+        if (Object.keys(data.actions).length === playerAmount - /* ourselves */ 1) {
+          resolve();
         }
       }
     });
