@@ -1,32 +1,14 @@
 const express = require('express');
-const crypto = require('crypto');
 const config = require('./config.json');
-const RoomManager = require('./RoomManager.js');
-
-/*
- * Signaling and Room-Management Server for my Thesis Project.
- * This server uses socket.io to manage connecting, disconnecting,
- * joining and leaving of rooms.
- *
- * A room is represented by a 4-letter ID, and can house a set of clients.
- * Additionally, a room can have a password restricting who can and
- * cannot join.
- *
- * Signaling is done exclusively via the 'signal'-message. All this
- * event listener does is pass a message from one client to another.
- * The content of this message is to be set and evaluated by the
- * peer-to-peer API, not the signaling mechanism.
- *
- * This server is used to generate TURN user credentials for the CoTurn
- * server as well - using the 'request-turn-credentials' event listener
- */
+const utils = require('./utils.js');
 
 const app = express();
 
-const server = require('http').Server(app, () => {});
+const server = require('http').Server(app);
 const io = require('socket.io')(server);
 app.use(express.static("public"));
 
+// serve files
 app.get('/', (req, res) => {
   res.status(200);
   res.sendFile(`${__dirname}${config.server.index}`);
@@ -40,88 +22,100 @@ app.get(`/game/*/`, (req, res) => {
 
 server.listen(config.server.listeningPort);
 
-//const io = new Server(config.server.listeningPort, {cors : config.server.cors ? config.server.cors : undefined});
-const manager = new RoomManager();
+const rooms = {};
+const playerSockets = {};
 
 io.sockets.on('connection', (socket) => {
-  console.log(`[LOBBY] client '${socket.id}' connected`)
+  socket.on('game-room-create', () => {
+    const id = utils.generateRoomID(rooms);
+    rooms[id] = {
+      id : id, // easier to identify room by player
+      players : [],
+      started : false,
+      host : null
+    };
 
-  // Credential structure: password is the HMAC of 'timestamp:username' with the shared secret used by CoTurn.
-  // The timestamp is in UNIX-format and represents the max lifetime of the credential.
-  // The username is simply the socket-id for our purposes.
-  socket.on('request-turn-credentials', () => {
-    const timestamp = Date.now() + config.ice.staticAuthCredentialLifetime * /* ms to hours */ 3600000;
-    const username = `${timestamp}:${socket.id}`;
-    const hmac = crypto.createHmac('sha1', config.ice.staticAuthSecret);
-      hmac.setEncoding('base64');
-      hmac.write(username);
-      hmac.end();
-    const passphrase = hmac.read();
-
-    socket.emit('request-turn-credentials-response', [
-      { urls: config.ice.stunServerAddress, username: username, credential: passphrase },
-      { urls: config.ice.turnServerAddress, username: username, credential: passphrase }
-    ]);
-  });
-
-  socket.on('game-room-create', (password) => {
-    const room = manager.createRoom(app, password);
-    socket.emit('game-room-created', room);
-
-    // if no client joins within a minute, destroy the room again (something went wrong on the clients' side, as the
-    // redirect didn't go through)
+    // if no client joins within a minute, destroy the room again (something went wrong on the clients' side, as the redirect didn't go through)
     setTimeout(() => {
-      manager.destroyRoom(room);
+      delete rooms[id];
     }, 60000);
+
+    // const room = manager.createRoom(app, 'Test');
+    socket.emit('game-room-created', id);
   });
 
-  socket.on('game-room-join', (id, password, joiner) => {
-    const room = manager.getRoom(id);
+  const PLAYER_SLOT_PRIORITY = [0, 2, 1, 3]; // Als erstes gegenüberliegende Farben füllen
+  socket.on('game-room-join', (roomID) => {
+    const room = rooms[roomID];
 
     if (!room) return socket.emit('game-room-join-failed', 'no such room');
-    if (room.passphrase !== password) return socket.emit('game-room-join-failed', 'wrong password');
-    if (room.clients.length >= 4) return socket.emit('game-room-join-failed', 'room full');
+    if (Object.keys(room.players).length >= 4) return socket.emit('game-room-join-failed', 'room full');
     if (room.started) return socket.emit('game-room-join-failed', 'The Game has started, hot-joining sessions is currently not supported.');
 
-    manager.addClientToRoom(joiner, id, socket);
-  });
+    for (let i = 0; i < 4; i++) {
+      if (!room.players[PLAYER_SLOT_PRIORITY[i]]) {
+        const peerID = utils.uuid4();
+        const color = PLAYER_SLOT_PRIORITY[i];
 
-  socket.on('start-game', (roomId) => {
-    const room = manager.getRoom(roomId);
-    console.log(room.host === socket.id);
+        socket.join(roomID);
 
-    console.log('START', room, room.started, room.host, socket.id);
-    if (room && !room.started && room.host === socket.id) {
-      room.started = true;
+        playerSockets[peerID] = socket.id;
+        room.players[color] = {peerID : peerID, color : color};
 
-      // generate seed for random (in this case a random number is sufficient)
-      room.seed = Math.random();
-      console.log(room.seed);
+        if (!room.host) {
+          room.host = socket.id;
+        }
 
-      // send random seed to players, and the socket starting the game (host)
-      room.clients.forEach((client) => socket.to(client.socket).emit('game-started', room.seed));
-      socket.emit('game-started', room.seed);
+        // Beigetretenen Spieler Benachrichtigen
+        socket.emit('game-room-joined', room.players, peerID, utils.generateTURNCredentials(socket.id), room.host === socket.id);
+
+        // Alle anderen Spieler über den neuen Spieler benachrichtigen
+        // room.players.forEach((player) => socket.to(playerSockets[player.peerID]).emit('game-room-client-joining', peerID, color));
+        socket.to(roomID).emit('game-room-client-joining', peerID, color);
+        break;
+      }
     }
   });
 
-  // WebRTC signaling
-  socket.on('signal', (roomId, e) => {
-    // find target client in the list of clients in a room, and pass on the signal if a room and target inside are found
-    const room = manager.getRoom(roomId);
+  socket.on('start-game', (roomId) => {
+    const room = rooms[roomId];
+
+    if (room && !room.started && room.host === socket.id) {
+      room.started = true;
+
+      // Seed für die Zufallsfunktion
+      room.seed = Math.random();
+
+      // Seed an alle Spieler des Raums senden
+      socket.to(roomId).emit('game-start', room.seed);
+      // auch an den Host-Spieler (quirk mit socket.io, socket.to(socket) funktioniert nicht bei gleichem socket)!
+      socket.emit('game-start', room.seed);
+    }
+  });
+
+  socket.on('signal', (roomID, targetID, e) => {
+    const room = rooms[roomID];
 
     if (room) {
-      const target = room.clients.find((client) => client.peerId === e.target)
-      if (target) socket.to(target.socket).emit('signal', e);
+      const target = room.players.find((player) => player && player.peerID === targetID);
+      if (target) {
+        socket.to(playerSockets[target.peerID]).emit('signal', e);
+      }
     }
   });
 
   socket.on('disconnecting', () => {
-    // TODO: manual disconnection without page close (e.g. via button on client side)
-    // TODO: this should then obviously not result in new TURN-credentials being generated
-    const roomId = manager.clients[socket.id];
-    if (roomId) {
-      console.log(`[LOBBY] client '${socket.id}' left`);
-      manager.removeClientFromRoom(socket.id, roomId, socket);
+    const peerID = Object.keys(playerSockets).find((peerID) => playerSockets[peerID] === socket.id);
+    const room = Object.values(rooms).find((room) => room.players.find((player) => player && player.peerID === peerID));
+
+    if (room) {
+      const leaver = room.players.find((player) => player && player.peerID === peerID);
+      if (leaver) {
+        console.log(leaver.color);
+        // remove from room
+        room.players = room.players.filter((player) => player && player.peerID !== peerID);
+        socket.to(room.id).emit('game-room-client-leaving', leaver.peerID, leaver.color);
+      }
     }
   });
 });

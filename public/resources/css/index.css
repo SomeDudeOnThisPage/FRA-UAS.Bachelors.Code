@@ -1,10 +1,13 @@
 html {
     position: relative;
     min-height: 100%;
+    max-width: 100%;
+    overflow-x: hidden;
 }
 
 body {
     margin-bottom: 60px;
+    background-color: antiquewhite;
 }
 
 .footer {
@@ -15,12 +18,14 @@ body {
     line-height: 60px;
 }
 
+#bg-main {
+    width: 100%;
+}
+
 #game-page {
-    display: none;
 }
 
 #room-id {
-    visibility : hidden;
 }
 
 #chat-message-box {
@@ -30,8 +35,8 @@ body {
 }
 
 #game-container-outer {
-    max-width: calc(70vh - 60px);
-    max-height: calc(70vh - 60px);
+    max-width: calc(100vh - 150px);
+    max-height: calc(100vh - 150px);
 }
 
 #content-col {
@@ -61,4 +66,46 @@ body {
 
 #container-outer {
     display: inline;
+}
+
+#why {
+    padding: 0;
+}
+
+@keyframes rotate {
+    0%{
+        transform: rotate(0deg);
+    }
+    100% {
+        transform: rotate(360deg);
+    }
+}
+
+@keyframes pulse {
+    0%{
+        width: 10%;
+        height: 10%;
+        left: 45%;
+        top: 45%;
+    }
+    50% {
+        width: 12%;
+        height: 12%;
+        left: 44%;
+        top: 44%;
+    }
+    100% {
+        width: 10%;
+        height: 10%;
+        left: 45%;
+        top: 45%;
+    }
+}
+
+.pulsing {
+    animation: pulse 0.75s infinite;
+}
+
+.rotating {
+    animation: rotate 0.75s ease-in-out;
 }

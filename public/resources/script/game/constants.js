@@ -125,3 +125,14 @@ export const ARROW_LOCATIONS = [
   { top : '60%', left : '87%', transform : 'rotate(180deg)' },
   { top : '87%', left : '29%', transform : 'rotate(270deg)' },
 ]
+
+export const DICE_POSITION = { top : '45%', left : '45%' }
+export const DICE_IMAGES = [
+  '/resources/img/0.png',
+  '/resources/img/1.png',
+  '/resources/img/2.png',
+  '/resources/img/3.png',
+  '/resources/img/4.png',
+  '/resources/img/5.png',
+  '/resources/img/6.png'
+]
