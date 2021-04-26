@@ -22,8 +22,18 @@ app.get(`/game/*/`, (req, res) => {
 
 server.listen(config.server.listeningPort);
 
+// room = {
+//   id = <four-letter room ID>
+//   started = true | false
+//   host = <socket-ID of the host>
+//   players = []
+// }
 const rooms = {};
-const playerSockets = {};
+
+// we don't want to store the socket-ids of players inside the player array of the room, because we don't want to send
+// them to the players when they connect. But we need to find the socket-id of a peer when signaling, so this object
+// mapping peerID -> socketID of every player exists.
+const sockets = {};
 
 io.sockets.on('connection', (socket) => {
   socket.on('game-room-create', () => {
@@ -57,9 +67,8 @@ io.sockets.on('connection', (socket) => {
         const peerID = utils.uuid4();
         const color = PLAYER_SLOT_PRIORITY[i];
 
-        socket.join(roomID);
-
-        playerSockets[peerID] = socket.id;
+        socket.join(roomID); // broadcasting for a subset of sockets is done via socket.io rooms
+        sockets[peerID] = socket.id; // sockets mapped to peer-id for signaling (can't be in player object, because we don't want to send that)
         room.players[color] = {peerID : peerID, color : color};
 
         if (!room.host) {
@@ -99,22 +108,37 @@ io.sockets.on('connection', (socket) => {
     if (room) {
       const target = room.players.find((player) => player && player.peerID === targetID);
       if (target) {
-        socket.to(playerSockets[target.peerID]).emit('signal', e);
+        socket.to(sockets[target.peerID]).emit('signal', e);
       }
     }
   });
 
+  /*
+   * SHORTER VERSION OF SIGNAL-EVENT FOR DOCUMENT, WITHOUT CHECKS
+   * socket.on('signal', (roomID, targetID, e) => {
+   *   const room = rooms[roomID];
+   *   const target = room.players.find((player) => player && player.peerID === targetID);
+   *   socket.to(sockets[target.peerID]).emit('signal', e);
+   * });
+   */
+
   socket.on('disconnecting', () => {
-    const peerID = Object.keys(playerSockets).find((peerID) => playerSockets[peerID] === socket.id);
+    // the following search operations aren't super efficient when the player count gets large,
+    // but it's for the sake of having less LOC to clutter up the document.
+    // if this was an actual production application, there should likely be a map of
+    // socketID -> {peerID, roomID} for each socket connected, to have O(1) lookup times
+    const peerID = Object.keys(sockets).find((peerID) => sockets[peerID] === socket.id);
     const room = Object.values(rooms).find((room) => room.players.find((player) => player && player.peerID === peerID));
 
     if (room) {
       const leaver = room.players.find((player) => player && player.peerID === peerID);
       if (leaver) {
-        console.log(leaver.color);
-        // remove from room
-        room.players = room.players.filter((player) => player && player.peerID !== peerID);
-        socket.to(room.id).emit('game-room-client-leaving', leaver.peerID, leaver.color);
+        room.players = room.players.filter((player) => player && player.peerID !== peerID); // remove from room
+        if (room.players.length > 0) {
+          socket.to(room.id).emit('game-room-client-leaving', leaver.peerID, leaver.color); // notify remaining
+        } else {
+          delete rooms[room.id]; // remove the room when the last player left the room
+        }
       }
     }
   });

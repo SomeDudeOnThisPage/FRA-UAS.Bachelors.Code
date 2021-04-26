@@ -79,7 +79,6 @@ const Board = function(rootElement) {
 
 Board.prototype.put = function(piece, player) {
   // position must be RELATIVE to the given player
-  console.log(this.aTiles[player.index], this.aTiles, player);
   if (piece.position < 0) {
     this.aTiles[player.index][piece.index - 1].append(piece.element);
   } else if (piece.position < 40) {

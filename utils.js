@@ -12,7 +12,7 @@ module.exports = {
     const passphrase = hmac.read();
 
     return [
-      { urls: config.ice.stunServerAddress, username: username, credential: passphrase },
+      { urls: config.ice.stunServerAddress },
       { urls: config.ice.turnServerAddress, username: username, credential: passphrase }
     ];
   },

@@ -17,8 +17,8 @@ export function Game(root, peer, channel) {
   this.currentRolls = 0;      // amount of rolls of the currently playing player
   this.canRollAgain = false;  // whether the current player can roll again (roll 6 or < 3 when all figures are in A-Field)
 
-  this.rng = null;            // seeded random number generator, initialized on game start
-  this.localPlayerId = null;  // the ID of the player on this machine, initialized on receiving our client data
+  this.rng = null;              // seeded random number generator, initialized on game start
+  this.localPlayerColor = null; // the color of the local player -> meaning the index of the local player in the player array
 
   // register event callbacks
   this.peer.on('make-move', (index, move) => this.onMakeMove(move, index));
@@ -139,7 +139,7 @@ Game.prototype.nextPlayer = function(current) {
   this.currentRolls = 0;
 
   // little notification for the player that is playing now, based on feedback from friends
-  if (this.players[next].index === this.localPlayerId) {
+  if (this.players[next].index === this.localPlayerColor) {
     this.board.pulseDie(true);
     utils.overlay('Your Turn!', () => {});
   }
@@ -197,17 +197,18 @@ Game.prototype.move = function(player, move) {
   const piece = player.pieces.find((piece) => piece.position === move.from);
 
   if (piece) {
-    // absolute index of the tile to move to, in range [0, 39]
+    // absolute index of the tile to move to, in range [0, 43]
     const toAbsolute = rules.getAbsoluteTilePosition(move.to, player);
 
     // when moving into a white field, we need to check if there's already a figure to beat
     for (const beatenPlayer of this.players) {
-      if (beatenPlayer && beatenPlayer.index !== this.current) {
+      if (beatenPlayer && beatenPlayer.index !== this.current) { // only check other players
         const beaten = rules.findPieceOnAbsolutePosition(toAbsolute, beatenPlayer);
 
         if (beaten && beaten.position <= 39) { // move beaten piece back to a fields, beating in b fields is not possible
+          this.board.put(-beaten.index, beatenPlayer);
           beaten.position = -beaten.index;
-          $(`#a${beatenPlayer.index}${beaten.index - 1}`).append(beaten.element);
+          //$(`#a${beatenPlayer.index}${beaten.index - 1}`).append(beaten.element);
         }
       }
     }
@@ -228,7 +229,7 @@ Game.prototype.render = function() {
   this.board.rootElement.empty();
   this.board.render();
   this.board.die.click(() => {
-    if (this.started && this.current === this.localPlayerId && this.state === 'moved') {
+    if (this.started && this.current === this.localPlayerColor && this.state === 'moved') {
       this.roll();
     }
   });

@@ -1,5 +1,3 @@
-import {PLAYER_COLORS, IMAGE_PLAYER_FIGURE_PATHS} from './constants.js';
-
 const Player = function(index, name, isLocalPlayer) {
   console.log('player index for ' + name + ' is ' + index + ', local player is ' + isLocalPlayer);
   this.index = index; // index start fields : 0 - 0 (yellow), 1 - 10 (green), 2 - 20 (red), 3 - 30 (black)
