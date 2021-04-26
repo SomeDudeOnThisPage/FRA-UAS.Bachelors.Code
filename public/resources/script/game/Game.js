@@ -135,15 +135,15 @@ Game.prototype.nextPlayer = function(current) {
 
   // reset roll state
   this.current = next;
-  this.canRollAgain = false;
+  this.canRollAgain = true;
   this.currentRolls = 0;
 
   // little notification for the player that is playing now, based on feedback from friends
   if (this.players[next].index === this.localPlayerColor) {
     this.board.pulseDie(true);
     utils.overlay('Your Turn!', () => {});
+    this.board.setDiePicture(0); // reset die picture for new player
   }
-  this.board.setDiePicture(0); // reset die picture
 }
 
 Game.prototype.addPlayer = function(player) {
@@ -166,15 +166,12 @@ Game.prototype.addPlayer = function(player) {
 
 Game.prototype.removePlayer = function(color) {
   const player = this.players[color];
-  console.log(color);
   if (player) {
-
     player.removePieces();
     this.players[color] = null;
-
     if (color === this.current) {
-      console.log('leaver is current');
       this.nextPlayer(this.current);
+      this.state = 'moved';
     }
   }
 }
