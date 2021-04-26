@@ -2,7 +2,7 @@ import Peer from './network/Peer.js';
 import {Game} from './game/Game.js';
 import Player from './game/Player.js';
 
-const GAME_SERVER_CONNECTION_DEV = 'http://localhost:1234';
+const GAME_SERVER_CONNECTION_DEV = 'http://localhost:3000';
 const GAME_SERVER_CONNECTION_PROD = null;
 
 const DATA_CHANNELS = [{ // reliable, ordered data channel

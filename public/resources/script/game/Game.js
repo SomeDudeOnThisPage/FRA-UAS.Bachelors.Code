@@ -206,8 +206,8 @@ Game.prototype.move = function(player, move) {
         const beaten = rules.findPieceOnAbsolutePosition(toAbsolute, beatenPlayer);
 
         if (beaten && beaten.position <= 39) { // move beaten piece back to a fields, beating in b fields is not possible
-          this.board.put(-beaten.index, beatenPlayer);
           beaten.position = -beaten.index;
+          this.board.put(beaten, beatenPlayer);
           //$(`#a${beatenPlayer.index}${beaten.index - 1}`).append(beaten.element);
         }
       }

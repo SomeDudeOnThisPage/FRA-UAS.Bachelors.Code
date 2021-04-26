@@ -1,5 +1,5 @@
 $(document).on('DOMContentLoaded', () => {
-  const socket = io('http://localhost:1234');
+  const socket = io('http://localhost:3000');
 
   $('#create-lobby-submit').click(() => {
     socket.emit('game-room-create', 'test');
