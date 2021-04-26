@@ -40,7 +40,7 @@ Piece.prototype.addElementCallback = function(game, player) {
   });
 
   this.element.click(() => {
-    if (!game.moves) { return; }
+    if (!game.moves || game.paused) { return; }
     // check if a move exists where this figure is on top of the src field
     const move = game.moves.find((move) => move.from === this.position);
     console.log(move, this.position, game.moves);

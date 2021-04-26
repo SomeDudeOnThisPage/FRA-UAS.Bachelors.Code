@@ -8,6 +8,7 @@ export function Game(root, peer, channel) {
   this.dataChannel = channel; // data channel to use for game data transfer
 
   this.started = false;
+  this.paused = false;
   this.players = [];
   this.board = new Board(root);
 
@@ -228,7 +229,7 @@ Game.prototype.render = function() {
   this.board.rootElement.empty();
   this.board.render();
   this.board.die.click(() => {
-    if (this.started && this.current === this.localPlayerColor && this.state === 'moved') {
+    if (this.started && !this.paused && this.current === this.localPlayerColor && this.state === 'moved') {
       this.roll();
     }
   });

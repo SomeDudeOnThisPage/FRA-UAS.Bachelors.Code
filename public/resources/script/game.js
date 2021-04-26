@@ -31,6 +31,7 @@ $(window).on('load', () => {
       game.render();
 
       socket.on('game-room-client-joining', (peerID, color) => { // Rückruffunktion für Spielfunktionalität
+        game.paused = true; // pause game until data channels are open
         game.addPlayer(new Player(color, 'TestPlayer', false));
       });
 
@@ -38,6 +39,10 @@ $(window).on('load', () => {
         console.log('leaving');
         peer.closeConnection(peerID);
         game.removePlayer(color);
+      });
+
+      peer.on('onDataChannelsOpen', () => {
+        game.paused = false; // unpause when all channels are open
       });
 
       players.forEach((player) => { // Verbindung zu anderen Peers aufbauen
