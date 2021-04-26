@@ -166,14 +166,16 @@ Game.prototype.addPlayer = function(player) {
 
 Game.prototype.removePlayer = function(color) {
   const player = this.players[color];
-
+  console.log(color);
   if (player) {
-    if (color === this.current) {
-      this.nextPlayer(this.current);
-    }
 
     player.removePieces();
     this.players[color] = null;
+
+    if (color === this.current) {
+      console.log('leaver is current');
+      this.nextPlayer(this.current);
+    }
   }
 }
 

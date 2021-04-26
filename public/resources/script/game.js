@@ -35,8 +35,9 @@ $(window).on('load', () => {
       });
 
       socket.on('game-room-client-leaving', (peerID, color) => { // Rückruffunktion für Spielfunktionalität
-        game.removePlayer(color);
+        console.log('leaving');
         peer.closeConnection(peerID);
+        game.removePlayer(color);
       });
 
       players.forEach((player) => { // Verbindung zu anderen Peers aufbauen
