@@ -6,7 +6,7 @@ const app = express();
 
 const server = require('http').Server(app);
 const io = require('socket.io')(server);
-app.use(express.static("public"));
+app.use(express.static(config.server.static));
 
 // serve files
 app.get('/', (req, res) => {
@@ -17,7 +17,7 @@ app.get('/', (req, res) => {
 app.get(`/game/*/`, (req, res) => {
   res.status(200);
   console.log(__dirname);
-  res.sendFile(`${__dirname}/public/game.html`);
+  res.sendFile(`${__dirname}${config.server.game}`);
 });
 
 server.listen(config.server.listeningPort);
