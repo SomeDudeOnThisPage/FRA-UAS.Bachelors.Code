@@ -47,7 +47,9 @@ io.sockets.on('connection', (socket) => {
 
     // if no client joins within a minute, destroy the room again (something went wrong on the clients' side, as the redirect didn't go through)
     setTimeout(() => {
-      delete rooms[id];
+      if (rooms[id] && rooms[id].players.length === 0) {
+        delete rooms[id];
+      }
     }, 60000);
 
     // const room = manager.createRoom(app, 'Test');
@@ -60,7 +62,7 @@ io.sockets.on('connection', (socket) => {
 
     if (!room) return socket.emit('game-room-join-failed', 'no such room');
     if (Object.keys(room.players).length >= 4) return socket.emit('game-room-join-failed', 'room full');
-    if (room.started) return socket.emit('game-room-join-failed', 'The Game has started, hot-joining sessions is currently not supported.');
+    // if (room.started) return socket.emit('game-room-join-failed', 'The Game has started, hot-joining sessions is currently not supported.');
 
     for (let i = 0; i < 4; i++) {
       if (!room.players[PLAYER_SLOT_PRIORITY[i]]) {
@@ -75,12 +77,15 @@ io.sockets.on('connection', (socket) => {
           room.host = socket.id;
         }
 
+        // re-generate seed
+        room.seed = Math.random();
+
         // Beigetretenen Spieler Benachrichtigen
-        socket.emit('game-room-joined', room.players, peerID, utils.generateTURNCredentials(socket.id), room.host === socket.id);
+        socket.emit('game-room-joined', room.players, room.started, room.seed, peerID, utils.generateTURNCredentials(socket.id), room.host === socket.id);
 
         // Alle anderen Spieler über den neuen Spieler benachrichtigen
         // room.players.forEach((player) => socket.to(playerSockets[player.peerID]).emit('game-room-client-joining', peerID, color));
-        socket.to(roomID).emit('game-room-client-joining', peerID, color);
+        socket.to(roomID).emit('game-room-client-joining', room.seed, peerID, color);
         break;
       }
     }

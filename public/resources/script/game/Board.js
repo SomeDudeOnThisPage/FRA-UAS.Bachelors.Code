@@ -1,5 +1,7 @@
-import {WHITE_TILE_LOCATIONS, A_TILE_LOCATIONS, B_TILE_LOCATIONS, LINE_LOCATIONS,
-ARROW_LOCATIONS, IMAGE_ARROW_PATH, DICE_POSITION, DICE_IMAGES} from './constants.js';
+import {
+  WHITE_TILE_LOCATIONS, A_TILE_LOCATIONS, B_TILE_LOCATIONS, LINE_LOCATIONS,
+  ARROW_LOCATIONS, IMAGE_ARROW_PATH, DICE_POSITION, DICE_IMAGES, IMAGE_PLAYER_FIGURE_PATHS
+} from './constants.js';
 import * as rules from './rules.js';
 import {getAbsoluteTilePosition} from "./rules.js";
 
@@ -69,23 +71,85 @@ const Board = function(rootElement) {
   this.rootElement = rootElement;
   this.whiteTiles = [];
   this.aTiles = {
-    0 : [], 1: [], 2 : [], 3 : []
+    0 : [], 1 : [], 2 : [], 3 : []
   };
   this.bTiles = {
-    0 : [], 1: [], 2 : [], 3 : []
+    0 : [], 1 : [], 2 : [], 3 : []
+  };
+  this.pieces = {
+    0 : [], 1 : [], 2 : [], 3 : []
   };
   this.die = null;
 }
 
+
+Board.prototype.makePiece = function(player, game, index, hasCallbacks) {
+  const style = {
+    'position'         : 'absolute',
+    'background-color' : 'transparent',
+    'left'             : '21%',
+    'top'              : '-2%',
+    'width'            : '60%'
+  };
+
+  const piece = $('<img alt="">')
+    .css(style)
+    .attr('src', IMAGE_PLAYER_FIGURE_PATHS[player.index]);
+
+  if (hasCallbacks) {
+    piece.on('mouseenter', () => {
+      if (game.moves && game.gamestate.current === player.index) {
+        const pieceData = game.gamestate.pieces[player.index][index];
+        const move = game.moves.find((move) => move.from === pieceData.position);
+        if (move) { // highlight absolute to
+          game.board.highlight(move.to, player, true);
+        }
+      }
+    });
+
+    piece.on('mouseleave', () => {
+      if (game.moves && game.gamestate.current === player.index) {
+        const pieceData = game.gamestate.pieces[player.index][index];
+        const move = game.moves.find((move) => move.from === pieceData.position);
+        if (move) { // un-highlight absolute to
+          game.board.highlight(move.to, player, false);
+        }
+      }
+    });
+
+    piece.click(() => {
+      if (!game.moves || game.paused) { return; }
+      // check if a move exists where this figure is on top of the src field
+      const pieceData = game.gamestate.pieces[player.index][index];
+      const move = game.moves.find((move) => move.from === pieceData.position);
+      if (move) {
+        if (game.moves && game.gamestate.current === player.index) {
+          const move = game.moves.find((move) => move.from === pieceData.position);
+          if (move) { // un-highlight absolute to
+            game.board.highlight(move.to, player, false);
+          }
+        }
+
+        game.makeMove(player, move);
+      }
+    });
+  }
+
+  this.pieces[player.index].push(piece);
+}
+
 Board.prototype.put = function(piece, player) {
+  console.log(piece, player);
   // position must be RELATIVE to the given player
+  const element = this.pieces[player.index][piece.index - 1];
   if (piece.position < 0) {
-    this.aTiles[player.index][piece.index - 1].append(piece.element);
+    this.aTiles[player.index][piece.index - 1].append(element);
   } else if (piece.position < 40) {
     // move element onto white tile (convert relative to absolute position)
-    this.whiteTiles[rules.getAbsoluteTilePosition(piece.position, player)].append(piece.element);
+    console.log(this.whiteTiles, this.whiteTiles[rules.getAbsoluteTilePosition(piece.position, player)], piece);
+    this.whiteTiles[rules.getAbsoluteTilePosition(piece.position, player)].append(element);
   } else if (piece.position < 44) {
-    this.bTiles[player.index][piece.position % 40].append(piece.element);
+    this.bTiles[player.index][piece.position % 40].append(element);
   }
 }
 

@@ -20,29 +20,54 @@ $(window).on('load', () => {
   socket.on('connect', () => {
     socket.emit('game-room-join', roomID); // Raum beitreten
 
-    socket.on('game-room-joined', (players, peerID, iceServers, isHost) => { // falls wir dem Raum beigetreten sind, erstelle von Peer- und Spiel
-      console.log(iceServers);
+    socket.on('game-room-joined', (players, started, seed, peerID, iceServers, isHost) => { // falls wir dem Raum beigetreten sind, erstelle von Peer- und Spiel
+      console.log(iceServers, players);
       const peer = new Peer(peerID, iceServers, DATA_CHANNELS); // erstellen des Peers
       peer.setSignalingCallback((data) => socket.emit('signal', roomID, data.target, data)); // Signalisierung VOM Peer weiterleiten
       socket.on('signal', (e) => peer.onsignal(e)); // Signalisierung ZUM Peer weiterleiten
 
       const game = new Game($('#maedn'), peer, DATA_CHANNELS[0].label); // erstellen des Spiels
       socket.on('game-start', (seed) => game.start(seed));
+      started ? game.start(seed) : game.seed(seed);
       game.render();
 
-      socket.on('game-room-client-joining', (peerID, color) => { // Rückruffunktion für Spielfunktionalität
+      socket.on('game-room-client-joining', (seed, peerID, color) => { // Rückruffunktion für Spielfunktionalität
         game.paused = true; // pause game until data channels are open
+        game.seed(seed);
         game.addPlayer(new Player(color, 'TestPlayer', false));
       });
 
       socket.on('game-room-client-leaving', (peerID, color) => { // Rückruffunktion für Spielfunktionalität
-        console.log('leaving');
         peer.closeConnection(peerID);
         game.removePlayer(color);
       });
 
       peer.on('onDataChannelsOpen', () => {
-        game.paused = false; // unpause when all channels are open
+        if (isHost) {
+          peer.broadcast(game.dataChannel, 'gamestate', game.gamestate);
+        }
+
+        // unpause upon all data channels open -> only if gamestate initialized
+        // if (game.gamestate.fsm !== 'starting') {
+          game.paused = false;
+        // }
+      });
+
+      peer.on('gamestate', (gamestate) => {
+        if (game.gamestate.fsm === 'starting') {
+          console.log('GAMESTATE', gamestate);
+          game.gamestate = gamestate;
+          game.paused = false;
+
+          // JQuery-'Bug': we need to recreate Piece-Objects on receiver-side, because their JQuery-elements are different
+          game.gamestate.pieces.forEach((pieces, index) => {
+            if (pieces) {
+              pieces.forEach((piece) => {
+                game.board.put(piece, game.players[index])
+              });
+            }
+          });
+        }
       });
 
       players.forEach((player) => { // Verbindung zu anderen Peers aufbauen

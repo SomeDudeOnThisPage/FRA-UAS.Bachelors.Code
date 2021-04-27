@@ -14,9 +14,15 @@ export function Game(root, peer, channel) {
 
   this.state = 'moved';
 
-  this.current = 0;           // index of the currently playing player
-  this.currentRolls = 0;      // amount of rolls of the currently playing player
-  this.canRollAgain = false;  // whether the current player can roll again (roll 6 or < 3 when all figures are in A-Field)
+  this.gamestate = {
+    fsm : 'starting',
+    started : false,
+    pieces : [],
+    current : -1,
+    lastRoll : -1,
+    currentRolls : -1,
+    canRollAgain : false
+  }
 
   this.rng = null;              // seeded random number generator, initialized on game start
   this.localPlayerColor = null; // the color of the local player -> meaning the index of the local player in the player array
@@ -26,9 +32,13 @@ export function Game(root, peer, channel) {
   this.peer.on('generate-random', (number, index) => this.onRoll(number, index));
 }
 
-Game.prototype.start = function(seed) {
-  this.started = true;
+Game.prototype.seed = function(seed) {
   this.rng = new Math.seedrandom(seed);
+}
+
+Game.prototype.start = function(seed) {
+  this.gamestate.started = true;
+  this.seed(seed);
   $('#btn-generate-random-number').prop('disabled', false);
 
   this.nextPlayer(-1);
@@ -43,28 +53,32 @@ Game.prototype.end = function(endedByHost) {
 }
 
 Game.prototype._postRoll = function(roll, playing) {
-  this.state = 'rolled';
+  this.gamestate.fsm = 'rolled';
   this.board.setDiePicture(roll);
   this.board.pulseDie(false);
 
-  const player = this.players[this.current];
-  this.currentRolls++;
-  this.moves = rules.generateMoves(roll, player);
+  const player = this.players[this.gamestate.current];
+  const pieces = this.gamestate.pieces[this.gamestate.current];
 
-  this.canRollAgain = rules.canRollAgain(roll, this.currentRolls, player);
+  this.gamestate.currentRolls++;
+  this.moves = rules.generateMoves(roll, player, pieces);
+
+  console.log(this.moves);
+
+  this.gamestate.canRollAgain = rules.canRollAgain(roll, this.gamestate.currentRolls, player, pieces);
 
   if (this.moves.length === 0) {
-    if (this.canRollAgain) {
+    if (this.gamestate.canRollAgain) {
       this.moves = undefined;
-      this.state = 'moved';
+      this.gamestate.fsm = 'moved';
       if (playing) {
         this.board.pulseDie(true);
         // utils.overlay(`You can roll again! You have ${3 - this.currentRolls} rolls remaining.`, () => );
       }
     } else {
       this.moves = undefined;
-      this.state = 'moved';
-      this.nextPlayer(this.current);
+      this.gamestate.fsm = 'moved';
+      this.nextPlayer(this.gamestate.current);
     }
   }
 }
@@ -72,23 +86,23 @@ Game.prototype._postRoll = function(roll, playing) {
 Game.prototype._postMakeMove = function(playing) {
   this.moves = undefined;
 
-  if (this.canRollAgain && playing) {
+  if (this.gamestate.canRollAgain && playing) {
     //utils.overlay(`You threw a six, so you can roll again!`, () => this.roll());
     this.board.pulseDie(true);
     this.board.setDiePicture(0);
   } else {
-    this.nextPlayer(this.current);
+    this.nextPlayer(this.gamestate.current);
   }
 }
 
 Game.prototype.roll = function() {
   const random = Math.floor(this.rng() * 6) + 1;
-  this.peer.broadcast(this.dataChannel, 'generate-random', random, this.current);
+  this.peer.broadcast(this.dataChannel, 'generate-random', random, this.gamestate.current);
   this._postRoll(random, true);
 }
 
 Game.prototype.onRoll = function(roll, index) {
-  if (!this.started || index !== this.current) return;
+  if (!this.gamestate.started || index !== this.gamestate.current) return;
 
   if (roll !== Math.floor(this.rng() * 6) + 1) {
     alert('The number the player rolled does not match our own RNG. If you are the host, kick them! They are cheating!');
@@ -98,7 +112,7 @@ Game.prototype.onRoll = function(roll, index) {
 }
 
 Game.prototype.makeMove = function(player, move) {
-  if (player.index === this.current) {
+  if (player.index === this.gamestate.current) {
     this.move(player, move);
     this.peer.broadcast(this.dataChannel, 'make-move', player.index, move);
     this._postMakeMove(true);
@@ -106,24 +120,24 @@ Game.prototype.makeMove = function(player, move) {
 }
 
 Game.prototype.onMakeMove = function(move, index) {
-  if (!this.started || index !== this.current) return;
+  if (!this.gamestate.started || index !== this.gamestate.current) return;
 
   if (this.moves) {
-    this.move(this.players[this.current], move);
+    this.move(this.players[this.gamestate.current], move);
   }
 
   this._postMakeMove(false)
 }
 
 Game.prototype.nextPlayer = function(current) {
-  if (rules.won(...this.players)) { // END GAME CONDITION: all players have won
+  if (rules.won(this.gamestate.pieces, ...this.players)) { // END GAME CONDITION: all players have won
     return this.end();
   }
 
   if (this.players[current]) {
-    if (this.canRollAgain) { // current player exists, and can roll again, don't increment current player
-      this.canRollAgain = false; // reset roll state
-      this.currentRolls = 0;
+    if (this.gamestate.canRollAgain) { // current player exists, and can roll again, don't increment current player
+      this.gamestate.canRollAgain = false; // reset roll state
+      this.gamestate.currentRolls = 0;
       return;
     }
   }
@@ -135,9 +149,9 @@ Game.prototype.nextPlayer = function(current) {
   }
 
   // reset roll state
-  this.current = next;
-  this.canRollAgain = true;
-  this.currentRolls = 0;
+  this.gamestate.current = next;
+  this.gamestate.canRollAgain = true;
+  this.gamestate.currentRolls = 0;
 
   // little notification for the player that is playing now, based on feedback from friends
   if (this.players[next].index === this.localPlayerColor) {
@@ -150,30 +164,32 @@ Game.prototype.nextPlayer = function(current) {
 Game.prototype.addPlayer = function(player) {
   if (player.index < 4 && !this.players[player.index]) {
     this.players[player.index] = player;
+    this.gamestate.pieces[player.index] = [];
 
-    // add our four pieces to the player (piece indices start at 1 to correspond to -1 * index element of [1, 4])
+    // add the players' four pieces to the gamestate
     for (let i = 1; i < 5; i++) {
       const piece = new Piece(i, -i, player);
-      player.addPiece(piece);
+      this.gamestate.pieces[player.index].push(piece);
 
-      if (player.isLocalPlayer) {
-        piece.addElementCallback(this, player);
-      }
-
+      // also create the piece element!
+      this.board.makePiece(player, this, i - 1, player.isLocalPlayer);
       this.board.put(piece, player);
     }
+    console.log('GAMESTATE', this.gamestate);
   }
 }
 
 Game.prototype.removePlayer = function(color) {
   const player = this.players[color];
-  if (player) {
-    player.removePieces();
-    this.players[color] = null;
-    if (color === this.current) {
-      this.nextPlayer(this.current);
-      this.state = 'moved';
-    }
+  if (!player) return;
+
+  this.board.pieces[color].forEach((piece) => piece.remove());
+  this.gamestate.pieces[color] = null;
+  this.players[color] = null;
+
+  if (color === this.gamestate.current) {
+    this.nextPlayer(this.gamestate.current);
+    this.gamestate.fsm = 'moved';
   }
 }
 
@@ -183,10 +199,8 @@ Game.prototype.removePlayer = function(color) {
  * @param move
  */
 Game.prototype.move = function(player, move) {
-  console.log(this.current === player.index, this.state === 'rolled', this.moves, move);
-
-  if (this.current !== player.index) return;
-  if (this.state !== 'rolled') return;
+  if (this.gamestate.current !== player.index) return;
+  if (this.gamestate.fsm !== 'rolled') return;
 
   // only allow 'valid' - i.e. moves that have been generated the same way by ourselves
   if (!this.moves.find((m) => m.from === move.from && m.to === move.to)) return;
@@ -194,21 +208,22 @@ Game.prototype.move = function(player, move) {
   // reset local moves
   this.moves = null;
 
-  const piece = player.pieces.find((piece) => piece.position === move.from);
+  const piece = this.gamestate.pieces[this.gamestate.current].find((piece) => piece.position === move.from);
 
   if (piece) {
+    console.log('GAMESTATE', JSON.parse(JSON.stringify(this.gamestate)));
+
     // absolute index of the tile to move to, in range [0, 43]
     const toAbsolute = rules.getAbsoluteTilePosition(move.to, player);
 
     // when moving into a white field, we need to check if there's already a figure to beat
     for (const beatenPlayer of this.players) {
-      if (beatenPlayer && beatenPlayer.index !== this.current) { // only check other players
-        const beaten = rules.findPieceOnAbsolutePosition(toAbsolute, beatenPlayer);
+      if (beatenPlayer && beatenPlayer.index !== this.gamestate.current) { // only check other players
+        const beaten = rules.findPieceOnAbsolutePosition(toAbsolute, beatenPlayer, this.gamestate.pieces[beatenPlayer.index]);
 
         if (beaten && beaten.position <= 39) { // move beaten piece back to a fields, beating in b fields is not possible
           beaten.position = -beaten.index;
           this.board.put(beaten, beatenPlayer);
-          //$(`#a${beatenPlayer.index}${beaten.index - 1}`).append(beaten.element);
         }
       }
     }
@@ -218,18 +233,18 @@ Game.prototype.move = function(player, move) {
     this.board.put(piece, player); // move piece
   }
 
-  if (rules.won(player)) {
+  if (rules.won(this.gamestate.pieces, player)) {
     player.hasWon = true;
     alert(`Woop Woop! Player ${player.name} has won!`);
   }
-  this.state = 'moved';
+  this.gamestate.fsm = 'moved';
 }
 
 Game.prototype.render = function() {
   this.board.rootElement.empty();
   this.board.render();
   this.board.die.click(() => {
-    if (this.started && !this.paused && this.current === this.localPlayerColor && this.state === 'moved') {
+    if (this.gamestate.started && !this.paused && this.gamestate.current === this.localPlayerColor && this.gamestate.fsm === 'moved' || this.gamestate.fsm === 'starting') {
       this.roll();
     }
   });
