@@ -3,10 +3,8 @@ import * as utils from './utils.js';
 import Board from './Board.js';
 import Piece from "./Piece.js";
 
-export function Game(root, peer, channel) {
+export function Game(root, peer) {
   this.peer = peer;
-  this.dataChannel = channel; // data channel to use for game data transfer
-
   this.started = false;
   this.paused = false;
   this.players = [];
@@ -52,8 +50,34 @@ Game.prototype.end = function(endedByHost) {
   }
 }
 
-Game.prototype._postRoll = function(roll, playing) {
+Game.prototype.setGamestate = function(gamestate) {
+  this.gamestate = gamestate;
+  this.board.setDiePicture(gamestate.lastRoll);
+  this.board.pulseDie(false);
+
+  utils.uiSetCurrentPlayer(this.gamestate.current);
+
+  // if we have something rolled, generate moves so when the move from the current player arrives, we
+  // update our gamestate!
+  if (gamestate.lastRoll !== -1) {
+    const player = this.players[this.gamestate.current];
+    const pieces = this.gamestate.pieces[this.gamestate.current];
+    this.moves = rules.generateMoves(this.gamestate.lastRoll, player, pieces);
+  }
+
+  // set visual piece positions on the board
+  this.gamestate.pieces.forEach((pieces, index) => {
+    if (pieces) {
+      pieces.forEach((piece) => {
+        this.board.put(piece, this.players[index])
+      });
+    }
+  });
+}
+
+Game.prototype.postRoll = function(roll, playing) {
   this.gamestate.fsm = 'rolled';
+  this.gamestate.lastRoll = roll;
   this.board.setDiePicture(roll);
   this.board.pulseDie(false);
 
@@ -62,8 +86,6 @@ Game.prototype._postRoll = function(roll, playing) {
 
   this.gamestate.currentRolls++;
   this.moves = rules.generateMoves(roll, player, pieces);
-
-  console.log(this.moves);
 
   this.gamestate.canRollAgain = rules.canRollAgain(roll, this.gamestate.currentRolls, player, pieces);
 
@@ -97,8 +119,8 @@ Game.prototype._postMakeMove = function(playing) {
 
 Game.prototype.roll = function() {
   const random = Math.floor(this.rng() * 6) + 1;
-  this.peer.broadcast(this.dataChannel, 'generate-random', random, this.gamestate.current);
-  this._postRoll(random, true);
+  this.peer.broadcast('generate-random', random, this.gamestate.current);
+  this.postRoll(random, true);
 }
 
 Game.prototype.onRoll = function(roll, index) {
@@ -108,13 +130,13 @@ Game.prototype.onRoll = function(roll, index) {
     alert('The number the player rolled does not match our own RNG. If you are the host, kick them! They are cheating!');
   }
 
-  this._postRoll(roll, false);
+  this.postRoll(roll, false);
 }
 
 Game.prototype.makeMove = function(player, move) {
   if (player.index === this.gamestate.current) {
     this.move(player, move);
-    this.peer.broadcast(this.dataChannel, 'make-move', player.index, move);
+    this.peer.broadcast('make-move', player.index, move);
     this._postMakeMove(true);
   }
 }
@@ -137,21 +159,29 @@ Game.prototype.nextPlayer = function(current) {
   if (this.players[current]) {
     if (this.gamestate.canRollAgain) { // current player exists, and can roll again, don't increment current player
       this.gamestate.canRollAgain = false; // reset roll state
-      this.gamestate.currentRolls = 0;
+      this.gamestate.lastRoll = -1;
       return;
     }
   }
 
   // increment next player to the next possible player that exists and hasn't won yet
   let next = (current + 1) % 4;
-  while (!this.players[next] || this.players[next].hasWon) {
-    next = (next + 1) % 4;
+  if (this.players.length > 1) {
+    while (!this.players[next] || this.players[next].hasWon) {
+      next = (next + 1) % 4;
+    }
+  } else {
+    next = this.localPlayerColor;
   }
+
 
   // reset roll state
   this.gamestate.current = next;
   this.gamestate.canRollAgain = true;
   this.gamestate.currentRolls = 0;
+  this.gamestate.lastRoll = -1;
+
+  utils.uiSetCurrentPlayer(this.gamestate.current);
 
   // little notification for the player that is playing now, based on feedback from friends
   if (this.players[next].index === this.localPlayerColor) {
@@ -166,6 +196,8 @@ Game.prototype.addPlayer = function(player) {
     this.players[player.index] = player;
     this.gamestate.pieces[player.index] = [];
 
+    utils.uiSetPlayerInfo(player);
+
     // add the players' four pieces to the gamestate
     for (let i = 1; i < 5; i++) {
       const piece = new Piece(i, -i, player);
@@ -175,7 +207,6 @@ Game.prototype.addPlayer = function(player) {
       this.board.makePiece(player, this, i - 1, player.isLocalPlayer);
       this.board.put(piece, player);
     }
-    console.log('GAMESTATE', this.gamestate);
   }
 }
 
@@ -186,6 +217,8 @@ Game.prototype.removePlayer = function(color) {
   this.board.pieces[color].forEach((piece) => piece.remove());
   this.gamestate.pieces[color] = null;
   this.players[color] = null;
+
+  utils.uiRemovePlayerInfo(player);
 
   if (color === this.gamestate.current) {
     this.nextPlayer(this.gamestate.current);
@@ -241,7 +274,7 @@ Game.prototype.move = function(player, move) {
 }
 
 Game.prototype.render = function() {
-  this.board.rootElement.empty();
+  // this.board.rootElement.empty();
   this.board.render();
   this.board.die.click(() => {
     if (this.gamestate.started && !this.paused && this.gamestate.current === this.localPlayerColor && this.gamestate.fsm === 'moved' || this.gamestate.fsm === 'starting') {

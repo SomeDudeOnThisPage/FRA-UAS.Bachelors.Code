@@ -16,7 +16,6 @@ app.get('/', (req, res) => {
 
 app.get(`/game/*/`, (req, res) => {
   res.status(200);
-  console.log(__dirname);
   res.sendFile(`${__dirname}${config.server.game}`);
 });
 
@@ -40,7 +39,7 @@ io.sockets.on('connection', (socket) => {
     const id = utils.generateRoomID(rooms);
     rooms[id] = {
       id : id, // easier to identify room by player
-      players : [],
+      players : [null, null, null, null],
       started : false,
       host : null
     };
@@ -48,6 +47,7 @@ io.sockets.on('connection', (socket) => {
     // if no client joins within a minute, destroy the room again (something went wrong on the clients' side, as the redirect didn't go through)
     setTimeout(() => {
       if (rooms[id] && rooms[id].players.length === 0) {
+        console.log('DELETED ROOM DUE TO INACTIVITY TIMEOUT');
         delete rooms[id];
       }
     }, 60000);
@@ -61,30 +61,24 @@ io.sockets.on('connection', (socket) => {
     const room = rooms[roomID];
 
     if (!room) return socket.emit('game-room-join-failed', 'no such room');
-    if (Object.keys(room.players).length >= 4) return socket.emit('game-room-join-failed', 'room full');
-    // if (room.started) return socket.emit('game-room-join-failed', 'The Game has started, hot-joining sessions is currently not supported.');
+    if (room.players.every((p) => p !== null)) return socket.emit('game-room-join-failed', 'room full');
 
     for (let i = 0; i < 4; i++) {
       if (!room.players[PLAYER_SLOT_PRIORITY[i]]) {
         const peerID = utils.uuid4();
         const color = PLAYER_SLOT_PRIORITY[i];
+        console.log('NEW PLAYER COLOR INDEX', color);
 
         socket.join(roomID); // broadcasting for a subset of sockets is done via socket.io rooms
         sockets[peerID] = socket.id; // sockets mapped to peer-id for signaling (can't be in player object, because we don't want to send that)
         room.players[color] = {peerID : peerID, color : color};
+        room.seed = Math.random();
 
         if (!room.host) {
           room.host = socket.id;
         }
 
-        // re-generate seed
-        room.seed = Math.random();
-
-        // Beigetretenen Spieler Benachrichtigen
         socket.emit('game-room-joined', room.players, room.started, room.seed, peerID, utils.generateTURNCredentials(socket.id), room.host === socket.id);
-
-        // Alle anderen Spieler über den neuen Spieler benachrichtigen
-        // room.players.forEach((player) => socket.to(playerSockets[player.peerID]).emit('game-room-client-joining', peerID, color));
         socket.to(roomID).emit('game-room-client-joining', room.seed, peerID, color);
         break;
       }
@@ -118,15 +112,6 @@ io.sockets.on('connection', (socket) => {
     }
   });
 
-  /*
-   * SHORTER VERSION OF SIGNAL-EVENT FOR DOCUMENT, WITHOUT CHECKS
-   * socket.on('signal', (roomID, targetID, e) => {
-   *   const room = rooms[roomID];
-   *   const target = room.players.find((player) => player && player.peerID === targetID);
-   *   socket.to(sockets[target.peerID]).emit('signal', e);
-   * });
-   */
-
   socket.on('disconnecting', () => {
     // the following search operations aren't super efficient when the player count gets large,
     // but it's for the sake of having less LOC to clutter up the document.
@@ -137,8 +122,19 @@ io.sockets.on('connection', (socket) => {
 
     if (room) {
       const leaver = room.players.find((player) => player && player.peerID === peerID);
+      console.log('LEAVER PLAYER COLOR INDEX', leaver.color)
       if (leaver) {
-        room.players = room.players.filter((player) => player && player.peerID !== peerID); // remove from room
+        room.players[leaver.color] = null;
+
+        // Host migration
+        if (socket.id === room.host && room.players.length > 0) {
+          const newHost = room.players.find((p) => p !== null);
+          if (newHost) {
+            room.host = sockets[newHost.peerID];
+            io.to(room.id).emit('game-room-host-migration', newHost.peerID);
+          }
+        }
+
         if (room.players.length > 0) {
           socket.to(room.id).emit('game-room-client-leaving', leaver.peerID, leaver.color); // notify remaining
         } else {

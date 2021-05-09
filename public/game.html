@@ -9,7 +9,7 @@
   <script src="https://code.jquery.com/jquery-3.6.0.min.js" integrity="sha256-/xUj+3OJU5yExlq6GSYGSHk7tPXikynS7ogEvDej/m4=" crossorigin="anonymous"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/3.1.2/rollups/aes.js"></script>
 
-  <script src='https://cdnjs.cloudflare.com/ajax/libs/socket.io/3.1.0/socket.io.min.js'></script>
+  <script src='/socket.io/socket.io.js'></script>
   <script src="//cdnjs.cloudflare.com/ajax/libs/seedrandom/3.0.5/seedrandom.min.js"></script>
   <script src="/resources/script/game.js" type="module"></script>
 
@@ -41,7 +41,16 @@
             <div id="game-container-outer" class="ratio ratio-1x1">
               <div id="red-outline">
                 <div id="second-yellow-outline">
-                  <div id="maedn"></div>
+                  <div id="maedn">
+
+                    <div id="overlay" style="display: none" class="card align-content-center">
+                      <div class="card-body pt-5 pb-3">
+                        <p class="card-text text-center">YOUR TURN</p>
+                        <p class="card-subtitle text-center">Click on The image of a die to roll!</p>
+                      </div>
+                    </div>
+
+                  </div>
                 </div>
               </div>
             </div>
@@ -49,7 +58,31 @@
         </div>
 
         <!-- content col -->
-        <div class="col-lg bg-light border border-dark">
+        <div class="col-lg bg-light border border-dark p-0">
+              <p class="card-header">Players</p>
+              <table class="table">
+                <tr>
+                  <th>Color</th>
+                  <th>Player</th>
+                </tr>
+                <tr id="player-info-row-1" class="player-info-row">
+                  <td>Yellow</td>
+                  <td id="player-info-1">No Player</td>
+                </tr>
+                <tr id="player-info-row-2" class="player-info-row">
+                  <td>Green</td>
+                  <td id="player-info-2">No Player</td>
+                </tr>
+                <tr id="player-info-row-3" class="player-info-row">
+                  <td>Red</td>
+                  <td id="player-info-3">No Player</td>
+                </tr>
+                <tr>
+                  <td id="player-info-row-4" class="player-info-row">Black</td>
+                  <td id="player-info-4">No Player</td>
+                </tr>
+              </table>
+
           <button id="btn-generate-random-number" type="button" disabled>Throw Dice</button>
           <p id="p-fair-number"></p>
           <button id="makemove" type="button">Test: Make Move</button><br  >

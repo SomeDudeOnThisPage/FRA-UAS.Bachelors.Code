@@ -72,6 +72,19 @@ body {
     padding: 0;
 }
 
+#overlay {
+    z-index: 99;
+    height: 33%;
+    top: 33%;
+    font-size: 50px;
+    font-weight: bold;
+}
+
+.card-subtitle {
+    font-size: 30px;
+    font-weight: normal;
+}
+
 @keyframes rotate {
     0%{
         transform: rotate(0deg);

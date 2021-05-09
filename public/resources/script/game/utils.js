@@ -8,15 +8,21 @@ const STYLE_OVERLAY = {
   'display' : 'none'
 };
 
-export const overlay = (text, onclick) => {
-  const overlay = $('<div>')
-    .css(STYLE_OVERLAY)
-    .text(text);
-  overlay.click(() => {
-    overlay.remove();
-    return onclick();
-  });
-
-  $('#maedn').append(overlay);
+export const overlay = (text) => {
+  const overlay = $('#overlay');
   overlay.fadeIn();
+  overlay.click(() => overlay.fadeOut());
+}
+
+export const uiRemovePlayerInfo = (player) => {
+  $(`#player-info-${player.index + 1}`).text('No Player');
+}
+
+export const uiSetPlayerInfo = (player) => {
+  $(`#player-info-${player.index + 1}`).text(player.name);
+}
+
+export const uiSetCurrentPlayer = (index) => {
+  $('.player-info-row').removeClass('table-info');
+  $(`#player-info-row-${index + 1}`).addClass('table-info');
 }

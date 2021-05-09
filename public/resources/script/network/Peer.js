@@ -1,7 +1,6 @@
-export default function Peer(id, iceServers, channels) {
+export default function Peer(id, iceServers) {
   this.id = id;
   this.callbacks = {};
-  this.channels = channels;
 
   this.rtcConfiguration = { iceServers : iceServers };
   this.connections = {};
@@ -50,7 +49,7 @@ Peer.prototype._dataChannelOpen = function(remotePeerId) {
 
   // check if all channels of all connections are open
   if (Object.values(this.connections).every((connection) => {
-    return Object.values(connection.dc).every((dc) => dc.readyState === 'open');
+    return connection.dc.readyState === 'open'
   })) {
     // if a callback for this event exists, run it
     if (this.callbacks['onDataChannelsOpen']) this.callbacks['onDataChannelsOpen']();
@@ -61,28 +60,24 @@ Peer.prototype._createConnection = function(remotePeerId) {
   const connection = new RTCPeerConnection(this.rtcConfiguration);
   connection.dc = {}; // list of data channels belonging to this connection
 
-  this.channels.forEach((options, i) => {
-    // setup a reliable and ordered data channel, store in connection object
-    const channel = connection.createDataChannel(options.label, {
-      negotiated : true,
-      id : i,
-      ...options.rtcDataChannelConfig
-    });
-    channel.onmessage = (e) => this._receiveMessage(e);
-    channel.onopen = () => this._dataChannelOpen(channel.label, remotePeerId);
-
-    connection.dc[channel.label] = channel;
+  // setup a reliable and ordered data channel, store in connection object
+  const channel = connection.createDataChannel('game', {
+    negotiated : true,
+    id : 0,
+    maxRetransmits : null,    // no maximum number of retransmits
+    ordered : true            // force ordered package retrieval
   });
+  channel.onmessage = (e) => this._receiveMessage(e);
+  channel.onopen = () => this._dataChannelOpen(channel.label, remotePeerId);
+
+  connection.dc = channel;
 
   connection.onsignalingstatechange = () => {
     console.log(`[${remotePeerId}] signaling state '${connection.signalingState}'`);
   }
 
   connection.onicecandidate = (e) => {
-    console.log(e.candidate);
-    if (e.candidate) {// e.candidate === null means we finished gathering ice candidates
-      this.signal(this._createSignal('ice-candidate', e.candidate, remotePeerId));
-    }
+    this.signal(this._createSignal('ice-candidate', e.candidate, remotePeerId));
   }
 
   connection.onicecandidateerror = (e) => {
@@ -155,25 +150,25 @@ Peer.prototype.on = function(e, cb) {
 }
 
 // TODO: not needed for mesh-architecture - maybe remove?
-Peer.prototype.emit = function(target, channel, e, ...args) { // function for the master peer to relay a targeted message
+Peer.prototype.emit = function(target, e, ...args) { // function for the master peer to relay a targeted message
   if (this.connections[target]) {
     const data = JSON.stringify({src : this.id, event: e, data: args});
-    this.connections[target].dc[channel].send(data);
+    this.connections[target].dc.send(data);
   }
 }
 
 // TODO: not needed for mesh-architecture - maybe remove?
-Peer.prototype.relay = function(exclude, channel,packet) { // function for the master peer to relay a message
+Peer.prototype.relay = function(exclude,packet) { // function for the master peer to relay a message
   Object.keys(this.connections).forEach((key) => {
     if (key !== exclude) {
-      this.connections[key].dc[channel].send(packet);
+      this.connections[key].dc.send(packet);
     }
   });
 }
 
-Peer.prototype.broadcast = function(channel, e, ...args) { // function for any peer to broadcast a message
+Peer.prototype.broadcast = function(e, ...args) { // function for any peer to broadcast a message
   Object.values(this.connections).forEach((connection) => {
     const data = JSON.stringify({src : this.id, event: e, data: args});
-    connection.dc[channel].send(data);
+    connection.dc.send(data);
   });
 }
