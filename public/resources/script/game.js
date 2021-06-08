@@ -1,49 +1,48 @@
 import Peer from './network/Peer.js';
 import {Game} from './game/Game.js';
 import Player from './game/Player.js';
+import * as utils from './game/utils.js';
 
 const GAME_SERVER_CONNECTION_DEV = 'http://localhost:3000';
-const GAME_SERVER_CONNECTION_PROD = null;
-
-const DATA_CHANNELS = [{ // reliable, ordered data channel
-  label : 'game',
-  rtcDataChannelConfig : {
-    maxRetransmits : null,    // no maximum number of retransmits
-    ordered : true            // force ordered package retrieval
-  }
-}];
+const GAME_SERVER_CONNECTION_PROD = 'http://20.56.95.156:3000'; // this should probably be injected by express middleware...
 
 $(window).on('load', () => {
   const socket = io(GAME_SERVER_CONNECTION_DEV);
   const roomID = window.location.pathname.split('/')[2];
+  const playerName = "Hi!";//prompt('Enter your name:');
 
   socket.on('connect', () => {
-    socket.emit('game-room-join', roomID); // Raum beitreten
+    socket.emit('game-room-join', roomID, playerName); // Raum beitreten
   });
 
   socket.on('game-room-joined', (players, started, seed, peerID, iceServers, isHost) => { // falls wir dem Raum beigetreten sind, erstelle von Peer- und Spiel
     let localPlayerIsHost = isHost;
 
-    const peer = new Peer(peerID, iceServers, DATA_CHANNELS); // erstellen des Peers
+    console.log('[ICE-SERVERS]', iceServers);
+
+    const peer = new Peer(peerID, iceServers); // erstellen des Peers
     peer.setSignalingCallback((data) => socket.emit('signal', roomID, data.target, data)); // Signalisierung VOM Peer weiterleiten
     socket.on('signal', (e) => peer.onsignal(e)); // Signalisierung ZUM Peer weiterleiten
 
-    const game = new Game($('#maedn'), peer, DATA_CHANNELS[0].label); // erstellen des Spiels
+    const game = new Game($('#maedn'), peer); // erstellen des Spiels
     socket.on('game-start', (seed) => game.start(seed));
     if (started) {
       game.seed(seed);
+      game.paused = true;
     }
     game.render();
 
-    socket.on('game-room-client-joining', (seed, peerID, color) => { // Rückruffunktion für Spielfunktionalität
-      game.paused = true; // pause game until data channels are open
+    socket.on('game-room-client-joining', (seed, peerID, color, name) => { // Rückruffunktion für Spielfunktionalität
+      game.paused = true;
       game.seed(seed);
-      game.addPlayer(new Player(color, 'TestPlayer', false));
+      game.addPlayer(new Player(color, name, false));
+      utils.uiEnablePlayerKickButtons(game.players, localPlayerIsHost, roomID, socket);
     });
 
     socket.on('game-room-client-leaving', (peerID, color) => { // Rückruffunktion für Spielfunktionalität
       peer.closeConnection(peerID);
       game.removePlayer(color);
+      utils.uiEnablePlayerKickButtons(game.players, localPlayerIsHost, roomID, socket);
     });
 
     socket.on('game-room-host-migration', (newHostPeerID) => {
@@ -53,34 +52,43 @@ $(window).on('load', () => {
       $('#end-game').prop('disabled', newHostPeerID !== peerID).click(() => socket.emit('end-game', roomID));
     });
 
+    socket.on('game-room-kick-player', (peerID, color) => {
+      if (game.players[color]) {
+        if (game.players[color].isLocalPlayer) {
+          // the server removes us when we are kicked, NOT when we disconnect
+          // so leave this page normally
+          window.location.href = '/';
+        } else {
+          peer.closeConnection(peerID);
+          game.removePlayer(color);
+          utils.uiEnablePlayerKickButtons(game.players, localPlayerIsHost, roomID, socket);
+        }
+      }
+    });
+
     peer.on('onDataChannelsOpen', () => {
       if (localPlayerIsHost) {
         peer.broadcast('gamestate', game.gamestate);
       }
-
-      // unpause upon all data channels open -> only if gamestate initialized
-      // if (game.gamestate.fsm !== 'starting') {
+      // unpause whenever ALL dcs to other peers are open (meaning also new ones)
       game.paused = false;
-      // }
     });
 
     peer.on('gamestate', (gamestate) => {
       game.setGamestate(gamestate);
-      game.paused = false;
+      game.paused = false; // unpause when receiving game state
     });
 
-    players.forEach((player) => { // Verbindung zu anderen Peers aufbauen
+    players.forEach((player) => { // connect to other peers
       if (!player) return;
       player.peerID === peerID ? game.localPlayerColor = player.color : peer.connect(player.peerID);
-      game.addPlayer(new Player(player.color, 'TestPlayer', game.localPlayerColor === player.color));
+      game.addPlayer(new Player(player.color, player.name, game.localPlayerColor === player.color));
     });
+
+    utils.uiEnablePlayerKickButtons(game.players, localPlayerIsHost, roomID, socket);
 
     // utility stuff, don't go over this in document
     $('#start-game').prop('disabled', !localPlayerIsHost).click(() => socket.emit('start-game', roomID, socket.id));
     $('#end-game').prop('disabled', !localPlayerIsHost).click(() => socket.emit('end-game', roomID, socket.id));
   });
-});
-
-$(document).on('DOMContentLoaded', () => {
-  //setupChatEvents(peer, room); // initialize chat events like sending and receiving messages
 });

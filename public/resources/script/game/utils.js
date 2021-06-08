@@ -26,3 +26,14 @@ export const uiSetCurrentPlayer = (index) => {
   $('.player-info-row').removeClass('table-info');
   $(`#player-info-row-${index + 1}`).addClass('table-info');
 }
+
+export const uiEnablePlayerKickButtons = (players, isHost, roomID, socket) => {
+  for (let i = 0; i < 4; i++) {
+    $(`#player-kick-${i + 1}`).prop('disabled', !isHost || !players[i] || players[i].isLocalPlayer);
+    $(`#player-kick-${i + 1}`).click(() => {
+      if (players[i]) {
+        socket.emit('game-room-kick-player', roomID, players[i].index);
+      }
+    });
+  }
+}

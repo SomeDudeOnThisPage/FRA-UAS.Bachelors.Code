@@ -3,7 +3,7 @@ const crypto = require('crypto');
 
 module.exports = {
   generateTURNCredentials : (user) => {
-    const timestamp = Date.now() + config.ice.staticAuthCredentialLifetime * /* ms to hours */ 3600000;
+    const timestamp = Math.floor(Date.now() / 1000 + config.ice.staticAuthCredentialLifetime * 3600);
     const username = `${timestamp}:${user}`;
     const hmac = crypto.createHmac('sha1', config.ice.staticAuthSecret);
     hmac.setEncoding('base64');

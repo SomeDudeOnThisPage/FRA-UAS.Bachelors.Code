@@ -45,7 +45,7 @@ Peer.prototype._receiveMessage = function(e) {
 }
 
 Peer.prototype._dataChannelOpen = function(remotePeerId) {
-  console.log(`[${remotePeerId}] data channel open`);
+  console.log(`[DATA CHANNEL] [${remotePeerId}] open`);
 
   // check if all channels of all connections are open
   if (Object.values(this.connections).every((connection) => {
@@ -73,10 +73,11 @@ Peer.prototype._createConnection = function(remotePeerId) {
   connection.dc = channel;
 
   connection.onsignalingstatechange = () => {
-    console.log(`[${remotePeerId}] signaling state '${connection.signalingState}'`);
+    console.log(`[SIGNALING STATE] [${remotePeerId}] ${connection.signalingState}`);
   }
 
   connection.onicecandidate = (e) => {
+    console.log(`[TRICKLE-ICE] found ICE-Candidate for ${remotePeerId}`, e.candidate);
     this.signal(this._createSignal('ice-candidate', e.candidate, remotePeerId));
   }
 
@@ -115,6 +116,7 @@ Peer.prototype.connect = function(remotePeerId) {
 
   connection.createOffer().then((offer) => {
     this.signal(this._createSignal('offer', offer, remotePeerId));
+    console.log('[JSEP] set local description');
     return connection.setLocalDescription(offer);
   }).catch((e) => console.error(e));
 }
@@ -127,19 +129,21 @@ Peer.prototype.onsignal = function(e) {
         this.connections[e.src] = connection;
 
         connection.setRemoteDescription(e.data).then(() => {
-          console.log('remote description set');
+          console.log('[JSEP] set remote description');
           return connection.createAnswer();
         }).then((answer) => {
           this.signal(this._createSignal('answer', answer, e.src));
+          console.log('[JSEP] set local description');
           return connection.setLocalDescription(answer);
         }).catch((e) => console.error(e));
         break;
       case 'answer': // on answer, set our remote description
-        this.connections[e.src].setRemoteDescription(e.data).then(() => console.log('remote description set')).catch(e => console.error(e));
+        this.connections[e.src].setRemoteDescription(e.data).then(() => console.log('[JSEP] set remote description')).catch(e => console.error(e));
         break;
       case 'ice-candidate': // on ice candidate, add the ice candidate to the corresponding connection
-        console.log('ice-candidate', e.data);
-        this.connections[e.src].addIceCandidate(e.data).then();
+        this.connections[e.src].addIceCandidate(e.data).then(() => {
+          console.log(`[TRICKLE-ICE] added ICE-Candidate from ${e.src}`, e.data);
+        });
         break;
     }
   }

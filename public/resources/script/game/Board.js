@@ -139,14 +139,14 @@ Board.prototype.makePiece = function(player, game, index, hasCallbacks) {
 }
 
 Board.prototype.put = function(piece, player) {
-  console.log(piece, player);
+  //console.log(piece, player);
   // position must be RELATIVE to the given player
   const element = this.pieces[player.index][piece.index - 1];
   if (piece.position < 0) {
     this.aTiles[player.index][piece.index - 1].append(element);
   } else if (piece.position < 40) {
     // move element onto white tile (convert relative to absolute position)
-    console.log(this.whiteTiles, this.whiteTiles[rules.getAbsoluteTilePosition(piece.position, player)], piece);
+    //console.log(this.whiteTiles, this.whiteTiles[rules.getAbsoluteTilePosition(piece.position, player)], piece);
     this.whiteTiles[rules.getAbsoluteTilePosition(piece.position, player)].append(element);
   } else if (piece.position < 44) {
     this.bTiles[player.index][piece.position % 40].append(element);

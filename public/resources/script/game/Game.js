@@ -2,6 +2,7 @@ import * as rules from './rules.js';
 import * as utils from './utils.js';
 import Board from './Board.js';
 import Piece from "./Piece.js";
+import Move from "./Move.js";
 
 export function Game(root, peer) {
   this.peer = peer;
@@ -26,7 +27,7 @@ export function Game(root, peer) {
   this.localPlayerColor = null; // the color of the local player -> meaning the index of the local player in the player array
 
   // register event callbacks
-  this.peer.on('make-move', (index, move) => this.onMakeMove(move, index));
+  this.peer.on('make-move', (index, from, to) => this.onMakeMove(new Move(from, to), index));
   this.peer.on('generate-random', (number, index) => this.onRoll(number, index));
 }
 
@@ -136,7 +137,7 @@ Game.prototype.onRoll = function(roll, index) {
 Game.prototype.makeMove = function(player, move) {
   if (player.index === this.gamestate.current) {
     this.move(player, move);
-    this.peer.broadcast('make-move', player.index, move);
+    this.peer.broadcast('make-move', player.index, move.from, move.to);
     this._postMakeMove(true);
   }
 }
@@ -244,8 +245,6 @@ Game.prototype.move = function(player, move) {
   const piece = this.gamestate.pieces[this.gamestate.current].find((piece) => piece.position === move.from);
 
   if (piece) {
-    console.log('GAMESTATE', JSON.parse(JSON.stringify(this.gamestate)));
-
     // absolute index of the tile to move to, in range [0, 43]
     const toAbsolute = rules.getAbsoluteTilePosition(move.to, player);
 

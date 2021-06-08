@@ -57,7 +57,7 @@ io.sockets.on('connection', (socket) => {
   });
 
   const PLAYER_SLOT_PRIORITY = [0, 2, 1, 3]; // Als erstes gegenüberliegende Farben füllen
-  socket.on('game-room-join', (roomID) => {
+  socket.on('game-room-join', (roomID, playerName) => {
     const room = rooms[roomID];
 
     if (!room) return socket.emit('game-room-join-failed', 'no such room');
@@ -71,7 +71,7 @@ io.sockets.on('connection', (socket) => {
 
         socket.join(roomID); // broadcasting for a subset of sockets is done via socket.io rooms
         sockets[peerID] = socket.id; // sockets mapped to peer-id for signaling (can't be in player object, because we don't want to send that)
-        room.players[color] = {peerID : peerID, color : color};
+        room.players[color] = {peerID : peerID, color : color, name: playerName};
         room.seed = Math.random();
 
         if (!room.host) {
@@ -79,7 +79,7 @@ io.sockets.on('connection', (socket) => {
         }
 
         socket.emit('game-room-joined', room.players, room.started, room.seed, peerID, utils.generateTURNCredentials(socket.id), room.host === socket.id);
-        socket.to(roomID).emit('game-room-client-joining', room.seed, peerID, color);
+        socket.to(roomID).emit('game-room-client-joining', room.seed, peerID, color, playerName);
         break;
       }
     }
@@ -98,6 +98,15 @@ io.sockets.on('connection', (socket) => {
       socket.to(roomId).emit('game-start', room.seed);
       // auch an den Host-Spieler (quirk mit socket.io, socket.to(socket) funktioniert nicht bei gleichem socket)!
       socket.emit('game-start', room.seed);
+    }
+  });
+
+  socket.on('game-room-kick-player', (roomId, index) => {
+    const room = rooms[roomId];
+
+    if (room && socket.id === room.host && room.players[index]) {
+      io.to(roomId).emit('game-room-kick-player', room.players[index].peerID, index);
+      room.players[index] = null;
     }
   });
 
