@@ -7,9 +7,9 @@ const GAME_SERVER_CONNECTION_DEV = 'http://localhost:3000';
 const GAME_SERVER_CONNECTION_PROD = 'http://20.56.95.156:3000'; // this should probably be injected by express middleware...
 
 $(window).on('load', () => {
-  const socket = io(GAME_SERVER_CONNECTION_DEV);
+  const socket = io(GAME_SERVER_CONNECTION_PROD);
   const roomID = window.location.pathname.split('/')[2];
-  const playerName = "Hi!";//prompt('Enter your name:');
+  const playerName = "custom names disabled for now"
 
   socket.on('connect', () => {
     socket.emit('game-room-join', roomID, playerName); // Raum beitreten
